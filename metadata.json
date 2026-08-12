@@ -1,0 +1,6 @@
+{
+  "name": "AutoFrame Studio Pro",
+  "description": "Batch photo framing system with automatic PNG transparent window detection, Lightroom-style color controls, and parallel 150-photo ZIP export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
