@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Eye,
   EyeOff,
@@ -14,6 +14,13 @@ import {
   Timer,
   Clock,
   Zap,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  Focus,
+  Move,
+  RotateCcw,
 } from 'lucide-react';
 import { BatchProgress, EditSettings, FrameTemplate, HoleBoundingBox, UserPhoto } from '../types';
 import { renderFramedPhotoCanvas } from '../utils/imageProcessing';
@@ -27,6 +34,7 @@ interface CenterPreviewProps {
   frameTemplate: FrameTemplate;
   hole: HoleBoundingBox;
   settings: EditSettings;
+  onChangeSettings?: (newSettings: EditSettings) => void;
   batchProgress?: BatchProgress;
   isProcessing?: boolean;
 }
@@ -39,6 +47,7 @@ export const CenterPreview: React.FC<CenterPreviewProps> = ({
   frameTemplate,
   hole,
   settings,
+  onChangeSettings,
   batchProgress,
   isProcessing = false,
 }) => {
@@ -49,6 +58,82 @@ export const CenterPreview: React.FC<CenterPreviewProps> = ({
   const [showOriginal, setShowOriginal] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1.0);
   const [isRendering, setIsRendering] = useState(false);
+  const [showFloatingHud, setShowFloatingHud] = useState(true);
+
+  // Drag-to-pan state
+  const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
+  const dragStartRef = useRef<{ x: number; y: number; initialOffsetX: number; initialOffsetY: number } | null>(null);
+
+  // Handle Drag-to-pan on canvas
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (!onChangeSettings || isProcessing) return;
+    setIsDraggingPhoto(true);
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      initialOffsetX: settings.offsetX,
+      initialOffsetY: settings.offsetY,
+    };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDraggingPhoto || !dragStartRef.current || !onChangeSettings) return;
+    const dx = e.clientX - dragStartRef.current.x;
+    const dy = e.clientY - dragStartRef.current.y;
+
+    // Adjust delta by current preview zoom level
+    const adjustedDx = Math.round(dx / zoomLevel);
+    const adjustedDy = Math.round(dy / zoomLevel);
+
+    onChangeSettings({
+      ...settings,
+      offsetX: dragStartRef.current.initialOffsetX + adjustedDx,
+      offsetY: dragStartRef.current.initialOffsetY + adjustedDy,
+    });
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (!isDraggingPhoto) return;
+    setIsDraggingPhoto(false);
+    dragStartRef.current = null;
+    try {
+      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      // Ignore release pointer capture error
+    }
+  };
+
+  // Handle Scroll-Wheel Zoom
+  const handleWheel = useCallback(
+    (e: React.WheelEvent) => {
+      if (!onChangeSettings || isProcessing) return;
+      e.preventDefault();
+      const zoomDelta = e.deltaY < 0 ? 0.05 : -0.05;
+      const newScale = Math.min(3.5, Math.max(0.2, Number((settings.scale + zoomDelta).toFixed(2))));
+      onChangeSettings({
+        ...settings,
+        scale: newScale,
+      });
+    },
+    [onChangeSettings, settings, isProcessing]
+  );
+
+  // Quick Nudge Helpers
+  const nudge = (dx: number, dy: number) => {
+    if (!onChangeSettings) return;
+    onChangeSettings({
+      ...settings,
+      offsetX: settings.offsetX + dx,
+      offsetY: settings.offsetY + dy,
+    });
+  };
+
+  const changeScale = (delta: number) => {
+    if (!onChangeSettings) return;
+    const newScale = Math.min(3.5, Math.max(0.2, Number((settings.scale + delta).toFixed(2))));
+    onChangeSettings({ ...settings, scale: newScale });
+  };
 
   // Render composite canvas whenever photo, frame, settings, or hole change
   useEffect(() => {
@@ -249,8 +334,112 @@ export const CenterPreview: React.FC<CenterPreviewProps> = ({
       {/* Main Canvas Viewport Area */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto flex items-center justify-center p-6 relative bg-[radial-gradient(#1E1E28_1px,transparent_1px)] [background-size:16px_16px]"
+        onWheel={handleWheel}
+        className="flex-1 overflow-auto flex items-center justify-center p-6 relative bg-[radial-gradient(#1E1E28_1px,transparent_1px)] [background-size:16px_16px] touch-none"
       >
+        {/* Floating Quick On-Canvas Direction & Zoom Controls HUD */}
+        {onChangeSettings && !isProcessing && (
+          <div className="absolute bottom-4 right-4 bg-[#111118]/90 border border-[#282838] p-2.5 rounded-2xl shadow-xl backdrop-blur-md z-20 space-y-2 flex flex-col items-center">
+            <div className="flex items-center justify-between w-full text-[10px] text-zinc-400 font-mono pb-1 border-b border-[#242432]">
+              <span className="flex items-center gap-1 font-bold text-indigo-300">
+                <Move className="w-3 h-3" />
+                Nudge &amp; Zoom
+              </span>
+              <button
+                onClick={() => setShowFloatingHud(!showFloatingHud)}
+                className="hover:text-white px-1"
+              >
+                {showFloatingHud ? 'Hide' : 'Show'}
+              </button>
+            </div>
+
+            {showFloatingHud && (
+              <>
+                {/* Directional Pad Buttons */}
+                <div className="flex flex-col items-center gap-1">
+                  <button
+                    onClick={() => nudge(0, -10)}
+                    className="p-1.5 rounded-lg bg-[#1D1D28] hover:bg-indigo-600 hover:text-white text-zinc-300 border border-[#2B2B3C] transition"
+                    title="Nudge Top / Up (-10px)"
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" />
+                  </button>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => nudge(-10, 0)}
+                      className="p-1.5 rounded-lg bg-[#1D1D28] hover:bg-indigo-600 hover:text-white text-zinc-300 border border-[#2B2B3C] transition"
+                      title="Nudge Left (-10px)"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      onClick={() => onChangeSettings({ ...settings, offsetX: 0, offsetY: 0 })}
+                      className="p-1.5 rounded-lg bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-800 transition"
+                      title="Center Image (0, 0)"
+                    >
+                      <Focus className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      onClick={() => nudge(10, 0)}
+                      className="p-1.5 rounded-lg bg-[#1D1D28] hover:bg-indigo-600 hover:text-white text-zinc-300 border border-[#2B2B3C] transition"
+                      title="Nudge Right (+10px)"
+                    >
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => nudge(0, 10)}
+                    className="p-1.5 rounded-lg bg-[#1D1D28] hover:bg-indigo-600 hover:text-white text-zinc-300 border border-[#2B2B3C] transition"
+                    title="Nudge Bottom / Down (+10px)"
+                  >
+                    <ArrowDown className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Quick Zoom Bar */}
+                <div className="flex items-center gap-1 pt-1 border-t border-[#242432] w-full justify-center">
+                  <button
+                    onClick={() => changeScale(-0.1)}
+                    className="p-1 rounded bg-[#1D1D28] hover:bg-zinc-800 text-zinc-300 border border-[#2B2B3C]"
+                    title="Zoom Out"
+                  >
+                    <ZoomOut className="w-3 h-3" />
+                  </button>
+
+                  <span className="text-[10px] font-mono font-bold text-indigo-300 px-1">
+                    {Math.round(settings.scale * 100)}%
+                  </span>
+
+                  <button
+                    onClick={() => changeScale(0.1)}
+                    className="p-1 rounded bg-[#1D1D28] hover:bg-zinc-800 text-zinc-300 border border-[#2B2B3C]"
+                    title="Zoom In"
+                  >
+                    <ZoomIn className="w-3 h-3" />
+                  </button>
+
+                  <button
+                    onClick={() => onChangeSettings({ ...settings, scale: 1.0, offsetX: 0, offsetY: 0 })}
+                    className="p-1 rounded bg-[#1D1D28] hover:bg-zinc-800 text-zinc-400 hover:text-white border border-[#2B2B3C]"
+                    title="Reset Scale & Offset"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                  </button>
+                </div>
+
+                {/* Offset Readout Badge */}
+                <div className="text-[9px] font-mono text-zinc-400 text-center">
+                  X: {settings.offsetX}px | Y: {settings.offsetY}px
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Live Batch Processing HUD Overlay */}
         {isProcessing && batchProgress && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-[#12121A]/95 border border-indigo-500/50 text-white rounded-2xl p-4 shadow-2xl backdrop-blur-md z-30 min-w-[340px] max-w-md space-y-3 animate-in fade-in slide-in-from-top-4 duration-300">
@@ -339,10 +528,21 @@ export const CenterPreview: React.FC<CenterPreviewProps> = ({
           </div>
         ) : (
           <div
-            className="transition-transform duration-150 shadow-2xl rounded-lg overflow-hidden border border-[#282832]/80 bg-black/40"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            className={`transition-transform duration-150 shadow-2xl rounded-lg overflow-hidden border border-[#282832]/80 bg-black/40 relative ${
+              isDraggingPhoto ? 'cursor-grabbing scale-[1.002]' : 'cursor-grab hover:border-indigo-500/50'
+            }`}
             style={{ transform: `scale(${zoomLevel})` }}
+            title="Click and drag to adjust Top / Bottom / Left / Right photo positioning inside frame • Scroll wheel to zoom"
           >
-            <canvas ref={canvasRef} className="max-h-[620px] max-w-full object-contain block" />
+            <canvas ref={canvasRef} className="max-h-[620px] max-w-full object-contain block pointer-events-none" />
+            <div className="absolute top-2 left-2 bg-black/60 text-zinc-400 hover:text-white px-2 py-0.5 rounded text-[10px] font-mono pointer-events-none opacity-80 backdrop-blur flex items-center gap-1">
+              <Move className="w-3 h-3 text-indigo-400" />
+              <span>Drag canvas to position • Wheel to zoom</span>
+            </div>
           </div>
         )}
       </div>

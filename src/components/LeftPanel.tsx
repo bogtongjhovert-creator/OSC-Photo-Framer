@@ -14,6 +14,13 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  ZoomIn,
+  ZoomOut,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  Focus,
 } from 'lucide-react';
 import { EditSettings, HoleBoundingBox, Preset } from '../types';
 import { LIGHTROOM_PRESETS } from '../utils/presets';
@@ -42,8 +49,9 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'lightroom' | 'hole_geometry'>('lightroom');
   const [isHoleExpanded, setIsHoleExpanded] = useState(false);
+  const [nudgeStep, setNudgeStep] = useState<number>(10);
 
-  const handleSliderChange = (key: keyof EditSettings, value: number) => {
+  const handleSliderChange = (key: keyof EditSettings, value: number | string) => {
     onChangeSettings({
       ...settings,
       [key]: value,
@@ -52,6 +60,23 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
 
   const handleResetAll = () => {
     onChangeSettings(DEFAULT_EDIT_SETTINGS);
+  };
+
+  // Nudge direction functions
+  const nudgeUp = (step = nudgeStep) => {
+    onChangeSettings({ ...settings, offsetY: settings.offsetY - step });
+  };
+  const nudgeDown = (step = nudgeStep) => {
+    onChangeSettings({ ...settings, offsetY: settings.offsetY + step });
+  };
+  const nudgeLeft = (step = nudgeStep) => {
+    onChangeSettings({ ...settings, offsetX: settings.offsetX - step });
+  };
+  const nudgeRight = (step = nudgeStep) => {
+    onChangeSettings({ ...settings, offsetX: settings.offsetX + step });
+  };
+  const resetPositionAndScale = () => {
+    onChangeSettings({ ...settings, scale: 1.0, offsetX: 0, offsetY: 0 });
   };
 
   return (
@@ -329,62 +354,185 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
               </div>
             </div>
 
-            {/* Zoom Scale & Positioning */}
+            {/* Zoom Scale & Positioning Control Suite */}
             <div className="space-y-4 bg-[#16161C] p-3.5 rounded-xl border border-[#262630]">
-              <span className="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
-                <Move className="w-3.5 h-3.5 text-indigo-400" />
-                Position &amp; Scale inside Window
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
+                  <Move className="w-3.5 h-3.5 text-indigo-400" />
+                  Position &amp; Scale inside Window
+                </span>
+                <button
+                  onClick={resetPositionAndScale}
+                  className="text-[10px] text-zinc-400 hover:text-indigo-300 bg-zinc-800/80 hover:bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700/60 transition flex items-center gap-1"
+                  title="Reset Position & Zoom Scale"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Reset</span>
+                </button>
+              </div>
 
-              {/* Scale Zoom Slider */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs">
-                  <span className="text-zinc-400">Zoom Scale</span>
-                  <span className="font-mono font-bold text-indigo-300">
-                    {settings.scale.toFixed(2)}x
+              {/* Zoom Scale Controls */}
+              <div className="space-y-2 bg-[#101015] p-2.5 rounded-lg border border-[#242430]">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-zinc-400 font-medium flex items-center gap-1">
+                    <ZoomIn className="w-3.5 h-3.5 text-indigo-400" />
+                    Zoom Scale
                   </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleSliderChange('scale', Math.max(0.2, Number((settings.scale - 0.1).toFixed(2))))}
+                      className="p-1 rounded bg-[#1A1A22] hover:bg-[#242430] text-zinc-300 border border-[#282836] transition"
+                      title="Zoom Out (-10%)"
+                    >
+                      <ZoomOut className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="font-mono font-bold text-indigo-300 min-w-[45px] text-center">
+                      {(settings.scale * 100).toFixed(0)}%
+                    </span>
+                    <button
+                      onClick={() => handleSliderChange('scale', Math.min(3.5, Number((settings.scale + 0.1).toFixed(2))))}
+                      className="p-1 rounded bg-[#1A1A22] hover:bg-[#242430] text-zinc-300 border border-[#282836] transition"
+                      title="Zoom In (+10%)"
+                    >
+                      <ZoomIn className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
+
                 <input
                   type="range"
-                  min="0.5"
-                  max="2.5"
+                  min="0.2"
+                  max="3.5"
                   step="0.05"
                   value={settings.scale}
                   onChange={(e) => handleSliderChange('scale', Number(e.target.value))}
                   className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                 />
+
+                {/* Quick Zoom Preset Buttons */}
+                <div className="grid grid-cols-6 gap-1 pt-0.5">
+                  {[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => handleSliderChange('scale', s)}
+                      className={`py-1 rounded text-[10px] font-mono font-bold transition border ${
+                        Math.abs(settings.scale - s) < 0.02
+                          ? 'bg-indigo-600 text-white border-indigo-400'
+                          : 'bg-[#181820] text-zinc-400 border-[#282832] hover:text-zinc-200'
+                      }`}
+                    >
+                      {Math.round(s * 100)}%
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* Offset X */}
+              {/* Directional Pad (D-Pad) for Left, Right, Up/Top, Down/Bottom */}
+              <div className="space-y-2 bg-[#101015] p-2.5 rounded-lg border border-[#242430]">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-zinc-400 font-medium">4-Way Directional Nudge</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-zinc-500 font-mono">Step:</span>
+                    {[1, 10, 25, 50].map((step) => (
+                      <button
+                        key={step}
+                        onClick={() => setNudgeStep(step)}
+                        className={`px-1.5 py-0.5 text-[10px] font-mono rounded border transition ${
+                          nudgeStep === step
+                            ? 'bg-indigo-600 text-white border-indigo-400'
+                            : 'bg-[#181820] text-zinc-400 border-[#282832] hover:text-zinc-200'
+                        }`}
+                      >
+                        {step}px
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3x3 D-Pad Control Grid */}
+                <div className="flex flex-col items-center gap-1.5 py-1">
+                  {/* Top Button */}
+                  <button
+                    onClick={() => nudgeUp()}
+                    className="w-24 py-1.5 rounded-lg bg-[#1E1E28] hover:bg-indigo-600 hover:text-white text-zinc-200 border border-[#282838] transition flex items-center justify-center gap-1 text-xs font-semibold shadow-sm"
+                    title={`Move Photo UP (Top) by -${nudgeStep}px`}
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" />
+                    <span>Top</span>
+                  </button>
+
+                  {/* Middle Row: Left, Center, Right */}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => nudgeLeft()}
+                      className="w-20 py-1.5 rounded-lg bg-[#1E1E28] hover:bg-indigo-600 hover:text-white text-zinc-200 border border-[#282838] transition flex items-center justify-center gap-1 text-xs font-semibold shadow-sm"
+                      title={`Move Photo LEFT by -${nudgeStep}px`}
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Left</span>
+                    </button>
+
+                    <button
+                      onClick={() => onChangeSettings({ ...settings, offsetX: 0, offsetY: 0 })}
+                      className="w-16 py-1.5 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 text-indigo-200 border border-indigo-800/60 transition flex items-center justify-center gap-1 text-xs font-bold"
+                      title="Reset Offset to Center (0, 0)"
+                    >
+                      <Focus className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>0,0</span>
+                    </button>
+
+                    <button
+                      onClick={() => nudgeRight()}
+                      className="w-20 py-1.5 rounded-lg bg-[#1E1E28] hover:bg-indigo-600 hover:text-white text-zinc-200 border border-[#282838] transition flex items-center justify-center gap-1 text-xs font-semibold shadow-sm"
+                      title={`Move Photo RIGHT by +${nudgeStep}px`}
+                    >
+                      <span>Right</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Bottom Button */}
+                  <button
+                    onClick={() => nudgeDown()}
+                    className="w-24 py-1.5 rounded-lg bg-[#1E1E28] hover:bg-indigo-600 hover:text-white text-zinc-200 border border-[#282838] transition flex items-center justify-center gap-1 text-xs font-semibold shadow-sm"
+                    title={`Move Photo DOWN (Bottom) by +${nudgeStep}px`}
+                  >
+                    <ArrowDown className="w-3.5 h-3.5" />
+                    <span>Bottom</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Fine Offset X Slider */}
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs">
                   <span className="text-zinc-400">Horizontal Pan (X)</span>
                   <span className="font-mono font-bold text-indigo-300">
-                    {settings.offsetX}px
+                    {settings.offsetX > 0 ? `+${settings.offsetX}` : settings.offsetX}px
                   </span>
                 </div>
                 <input
                   type="range"
-                  min="-300"
-                  max="300"
+                  min="-500"
+                  max="500"
                   value={settings.offsetX}
                   onChange={(e) => handleSliderChange('offsetX', Number(e.target.value))}
                   className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                 />
               </div>
 
-              {/* Offset Y */}
+              {/* Fine Offset Y Slider */}
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs">
                   <span className="text-zinc-400">Vertical Pan (Y)</span>
                   <span className="font-mono font-bold text-indigo-300">
-                    {settings.offsetY}px
+                    {settings.offsetY > 0 ? `+${settings.offsetY}` : settings.offsetY}px
                   </span>
                 </div>
                 <input
                   type="range"
-                  min="-300"
-                  max="300"
+                  min="-500"
+                  max="500"
                   value={settings.offsetY}
                   onChange={(e) => handleSliderChange('offsetY', Number(e.target.value))}
                   className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"

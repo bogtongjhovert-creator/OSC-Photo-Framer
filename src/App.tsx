@@ -352,6 +352,7 @@ export default function App() {
             frameTemplate={selectedFrame}
             hole={hole}
             settings={settings}
+            onChangeSettings={(newSettings) => setSettings(newSettings)}
             batchProgress={batchProgress}
             isProcessing={isProcessing}
           />
