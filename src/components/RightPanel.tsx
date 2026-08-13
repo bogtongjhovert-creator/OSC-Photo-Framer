@@ -21,9 +21,10 @@ import { formatDurationSeconds, formatStopwatch, formatSpeed } from '../utils/fo
 
 interface RightPanelProps {
   frames: FrameTemplate[];
-  selectedFrame: FrameTemplate;
+  selectedFrame: FrameTemplate | null;
   onSelectFrame: (frame: FrameTemplate) => void;
   onCustomFrameUpload: (file: File) => void;
+  onRemoveFrame?: (id: string) => void;
   photos: UserPhoto[];
   selectedPhotoIndex: number;
   onSelectPhotoIndex: (index: number) => void;
@@ -43,6 +44,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   selectedFrame,
   onSelectFrame,
   onCustomFrameUpload,
+  onRemoveFrame,
   photos,
   selectedPhotoIndex,
   onSelectPhotoIndex,
@@ -141,43 +143,65 @@ export const RightPanel: React.FC<RightPanelProps> = ({
           </div>
 
           {/* Prebuilt Templates Grid */}
-          <div className="grid grid-cols-2 gap-2">
-            {frames.map((frame) => {
-              const isSelected = selectedFrame.id === frame.id;
-              return (
-                <button
-                  key={frame.id}
-                  onClick={() => onSelectFrame(frame)}
-                  className={`p-2 rounded-xl border text-left transition flex flex-col gap-1.5 relative ${
-                    isSelected
-                      ? 'border-indigo-500 bg-indigo-500/15 shadow-md shadow-indigo-950/40'
-                      : 'border-[#262630] bg-[#16161C] hover:border-zinc-700'
-                  }`}
-                >
-                  <div className="w-full h-20 bg-black/50 rounded-lg overflow-hidden border border-[#262630] relative flex items-center justify-center">
-                    <img
-                      src={frame.imageUrl}
-                      alt={frame.name}
-                      className="w-full h-full object-contain p-1"
-                    />
-                    {isSelected && (
-                      <div className="absolute top-1 right-1 bg-indigo-600 text-white rounded-full p-0.5 shadow">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                      </div>
-                    )}
+          {frames.length === 0 ? (
+            <div className="p-4 rounded-xl border border-dashed border-[#262630] bg-[#14141A] text-center space-y-1">
+              <p className="text-xs font-semibold text-zinc-400">No Frame Templates Loaded</p>
+              <p className="text-[10px] text-zinc-500">
+                Upload your PNG frame template above with a transparent window to get started.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {frames.map((frame) => {
+                const isSelected = selectedFrame?.id === frame.id;
+                return (
+                  <div
+                    key={frame.id}
+                    onClick={() => onSelectFrame(frame)}
+                    className={`p-2 rounded-xl border text-left transition flex flex-col gap-1.5 relative group cursor-pointer ${
+                      isSelected
+                        ? 'border-indigo-500 bg-indigo-500/15 shadow-md shadow-indigo-950/40'
+                        : 'border-[#262630] bg-[#16161C] hover:border-zinc-700'
+                    }`}
+                  >
+                    <div className="w-full h-20 bg-black/50 rounded-lg overflow-hidden border border-[#262630] relative flex items-center justify-center">
+                      <img
+                        src={frame.imageUrl}
+                        alt={frame.name}
+                        className="w-full h-full object-contain p-1"
+                      />
+                      {isSelected && (
+                        <div className="absolute top-1 right-1 bg-indigo-600 text-white rounded-full p-0.5 shadow">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        </div>
+                      )}
+                      {/* Delete Frame Button */}
+                      {onRemoveFrame && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRemoveFrame(frame.id);
+                          }}
+                          className="absolute top-1 left-1 bg-red-950/80 hover:bg-red-600 text-red-200 hover:text-white p-1 rounded-full opacity-80 group-hover:opacity-100 transition shadow z-10"
+                          title="Remove Frame Template"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-[11px] font-bold text-zinc-200 block truncate">
+                        {frame.name}
+                      </span>
+                      <span className="text-[9px] text-zinc-500 font-mono">
+                        Hole: {Math.round(frame.hole.width)}x{Math.round(frame.hole.height)}
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-[11px] font-bold text-zinc-200 block truncate">
-                      {frame.name}
-                    </span>
-                    <span className="text-[9px] text-zinc-500 font-mono">
-                      Hole: {Math.round(frame.hole.width)}x{Math.round(frame.hole.height)}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <hr className="border-[#22222a]" />

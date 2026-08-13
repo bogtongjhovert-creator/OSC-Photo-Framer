@@ -31,7 +31,7 @@ interface CenterPreviewProps {
   photoIndex: number;
   totalPhotos: number;
   onSelectPhotoIndex: (index: number) => void;
-  frameTemplate: FrameTemplate;
+  frameTemplate: FrameTemplate | null;
   hole: HoleBoundingBox;
   settings: EditSettings;
   onChangeSettings?: (newSettings: EditSettings) => void;
@@ -235,6 +235,20 @@ export const CenterPreview: React.FC<CenterPreviewProps> = ({
         <h3 className="text-base font-bold text-zinc-200 mb-1">No Photo Selected</h3>
         <p className="text-xs text-zinc-400 max-w-sm mb-6">
           Upload user photos or click &quot;Fill Sample Set&quot; in the header to preview Lightroom adjustments and transparent frame window overlays.
+        </p>
+      </div>
+    );
+  }
+
+  if (!frameTemplate) {
+    return (
+      <div className="flex-1 bg-[#09090C] flex flex-col items-center justify-center p-8 text-center border-r border-[#22222a]">
+        <div className="w-20 h-20 rounded-2xl bg-[#14141A] border border-[#282832] flex items-center justify-center mb-4 shadow-xl">
+          <Layers className="w-10 h-10 text-indigo-400 animate-pulse" />
+        </div>
+        <h3 className="text-base font-bold text-zinc-200 mb-1">No Frame Template Selected</h3>
+        <p className="text-xs text-zinc-400 max-w-sm">
+          Upload a custom PNG frame template with a transparent cutout window in Zone A (right sidebar) to start batch framing your photos.
         </p>
       </div>
     );

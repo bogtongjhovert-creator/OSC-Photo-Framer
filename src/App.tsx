@@ -114,6 +114,25 @@ export default function App() {
     reader.readAsDataURL(file);
   }, []);
 
+  // Remove Frame Template
+  const handleRemoveFrame = useCallback(
+    (id: string) => {
+      setFrames((prev) => {
+        const nextFrames = prev.filter((f) => f.id !== id);
+        if (selectedFrame?.id === id) {
+          if (nextFrames.length > 0) {
+            setSelectedFrame(nextFrames[0]);
+            setHole(nextFrames[0].hole);
+          } else {
+            setSelectedFrame(null);
+          }
+        }
+        return nextFrames;
+      });
+    },
+    [selectedFrame]
+  );
+
   // Re-detect hole on demand
   const handleDetectHole = useCallback(async () => {
     if (!selectedFrame) return;
@@ -343,42 +362,39 @@ export default function App() {
         />
 
         {/* Center Panel: Interactive Live Canvas Preview */}
-        {selectedFrame && (
-          <CenterPreview
-            currentPhoto={currentPhoto}
-            photoIndex={selectedPhotoIndex}
-            totalPhotos={photos.length}
-            onSelectPhotoIndex={setSelectedPhotoIndex}
-            frameTemplate={selectedFrame}
-            hole={hole}
-            settings={settings}
-            onChangeSettings={(newSettings) => setSettings(newSettings)}
-            batchProgress={batchProgress}
-            isProcessing={isProcessing}
-          />
-        )}
+        <CenterPreview
+          currentPhoto={currentPhoto}
+          photoIndex={selectedPhotoIndex}
+          totalPhotos={photos.length}
+          onSelectPhotoIndex={setSelectedPhotoIndex}
+          frameTemplate={selectedFrame}
+          hole={hole}
+          settings={settings}
+          onChangeSettings={(newSettings) => setSettings(newSettings)}
+          batchProgress={batchProgress}
+          isProcessing={isProcessing}
+        />
 
         {/* Right Panel: Template Manager & 150-Photo Queue & Batch Action */}
-        {selectedFrame && (
-          <RightPanel
-            frames={frames}
-            selectedFrame={selectedFrame}
-            onSelectFrame={handleSelectFrame}
-            onCustomFrameUpload={handleCustomFrameUpload}
-            photos={photos}
-            selectedPhotoIndex={selectedPhotoIndex}
-            onSelectPhotoIndex={setSelectedPhotoIndex}
-            onUploadPhotos={handleUploadPhotos}
-            onRemovePhoto={handleRemovePhoto}
-            onClearAllPhotos={handleClearAllPhotos}
-            maxPhotos={MAX_PHOTOS}
-            batchProgress={batchProgress}
-            onStartBatch={handleStartBatch}
-            onDownloadZip={handleDownloadZip}
-            zipBlob={zipBlob}
-            isProcessing={isProcessing}
-          />
-        )}
+        <RightPanel
+          frames={frames}
+          selectedFrame={selectedFrame}
+          onSelectFrame={handleSelectFrame}
+          onCustomFrameUpload={handleCustomFrameUpload}
+          onRemoveFrame={handleRemoveFrame}
+          photos={photos}
+          selectedPhotoIndex={selectedPhotoIndex}
+          onSelectPhotoIndex={setSelectedPhotoIndex}
+          onUploadPhotos={handleUploadPhotos}
+          onRemovePhoto={handleRemovePhoto}
+          onClearAllPhotos={handleClearAllPhotos}
+          maxPhotos={MAX_PHOTOS}
+          batchProgress={batchProgress}
+          onStartBatch={handleStartBatch}
+          onDownloadZip={handleDownloadZip}
+          zipBlob={zipBlob}
+          isProcessing={isProcessing}
+        />
       </div>
     </div>
   );
