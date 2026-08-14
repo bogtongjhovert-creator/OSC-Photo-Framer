@@ -9,7 +9,7 @@ export interface FrameTemplate {
   id: string;
   name: string;
   description: string;
-  category: 'Modern' | 'Vintage' | 'Minimalist' | 'Ornate';
+  category: 'Modern' | 'Vintage' | 'Minimalist' | 'Ornate' | 'Official';
   imageUrl: string;
   hole: HoleBoundingBox;
   canvasWidth: number;
@@ -46,9 +46,12 @@ export interface UserPhoto {
 export interface Preset {
   id: string;
   name: string;
-  iconName: string;
+  iconName?: string;
   settings: Partial<EditSettings>;
   previewColor: string;
+  isCustom?: boolean;
+  description?: string;
+  createdAt?: number;
 }
 
 export interface BatchProgress {

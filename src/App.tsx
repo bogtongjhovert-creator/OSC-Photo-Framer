@@ -12,10 +12,16 @@ import {
   Preset,
 } from './types';
 import {
-  generateSampleFrames,
   generateSamplePhotos,
+  createPanpacificUniversityFrame,
   DEFAULT_EDIT_SETTINGS,
 } from './utils/sampleAssets';
+import {
+  loadCustomPresets,
+  saveCustomPresets,
+  createCustomPreset,
+  exportPresetsToJson,
+} from './utils/presets';
 import {
   detectTransparentHole,
   batchProcessPhotos,
@@ -24,7 +30,7 @@ import {
 export default function App() {
   const MAX_PHOTOS = 150;
 
-  // Initial Sample Data
+  // Initial Sample Data (Empty by default)
   const [frames, setFrames] = useState<FrameTemplate[]>([]);
   const [selectedFrame, setSelectedFrame] = useState<FrameTemplate | null>(null);
   const [hole, setHole] = useState<HoleBoundingBox>({ x: 150, y: 150, width: 900, height: 600 });
@@ -35,6 +41,7 @@ export default function App() {
 
   const [settings, setSettings] = useState<EditSettings>(DEFAULT_EDIT_SETTINGS);
   const [activePresetId, setActivePresetId] = useState<string>('default');
+  const [customPresets, setCustomPresets] = useState<Preset[]>(() => loadCustomPresets());
 
   const [batchProgress, setBatchProgress] = useState<BatchProgress>({
     total: 0,
@@ -44,18 +51,10 @@ export default function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [zipBlob, setZipBlob] = useState<Blob | null>(null);
 
-  // Initialize sample frames & photos on mount
+  // Automatically save custom presets to localStorage whenever updated
   useEffect(() => {
-    const sampleFrames = generateSampleFrames();
-    setFrames(sampleFrames);
-    if (sampleFrames.length > 0) {
-      setSelectedFrame(sampleFrames[0]);
-      setHole(sampleFrames[0].hole);
-    }
-
-    const initialPhotos = generateSamplePhotos(5);
-    setPhotos(initialPhotos);
-  }, []);
+    saveCustomPresets(customPresets);
+  }, [customPresets]);
 
   // Handle PNG Frame Template Selection & Hole Auto-Detection
   const handleSelectFrame = useCallback(async (frame: FrameTemplate) => {
@@ -133,6 +132,19 @@ export default function App() {
     [selectedFrame]
   );
 
+  // Restore Official Panpacific University Frame
+  const handleRestorePanpacificFrame = useCallback(() => {
+    const panpacificFrame = createPanpacificUniversityFrame();
+    setFrames((prev) => {
+      const exists = prev.some((f) => f.id === panpacificFrame.id);
+      if (!exists) {
+        return [panpacificFrame, ...prev];
+      }
+      return prev;
+    });
+    setSelectedFrame(panpacificFrame);
+    setHole(panpacificFrame.hole);
+  }, []);
   // Re-detect hole on demand
   const handleDetectHole = useCallback(async () => {
     if (!selectedFrame) return;
@@ -221,6 +233,74 @@ export default function App() {
       ...preset.settings,
     }));
   }, []);
+
+  // Save new custom preset
+  const handleSaveCustomPreset = useCallback(
+    (name: string, color: string, description?: string) => {
+      const newPreset = createCustomPreset(name, settings, color, description);
+      setCustomPresets((prev) => [newPreset, ...prev]);
+      setActivePresetId(newPreset.id);
+    },
+    [settings]
+  );
+
+  // Update existing custom preset (either rename/recolor or update with current sliders)
+  const handleUpdateCustomPreset = useCallback(
+    (presetId: string, name?: string, color?: string, description?: string) => {
+      setCustomPresets((prev) =>
+        prev.map((p) => {
+          if (p.id !== presetId) return p;
+          return {
+            ...p,
+            name: name ?? p.name,
+            previewColor: color ?? p.previewColor,
+            description: description !== undefined ? description : p.description,
+            settings: {
+              exposure: settings.exposure,
+              contrast: settings.contrast,
+              saturation: settings.saturation,
+              sharpness: settings.sharpness,
+              temperature: settings.temperature,
+            },
+          };
+        })
+      );
+      setActivePresetId(presetId);
+    },
+    [settings]
+  );
+
+  // Delete custom preset
+  const handleDeleteCustomPreset = useCallback(
+    (presetId: string) => {
+      setCustomPresets((prev) => prev.filter((p) => p.id !== presetId));
+      if (activePresetId === presetId) {
+        setActivePresetId('default');
+      }
+    },
+    [activePresetId]
+  );
+
+  // Import custom presets from JSON
+  const handleImportPresets = useCallback((imported: Preset[]) => {
+    setCustomPresets((prev) => {
+      // Filter out duplicates by name or id
+      const existingNames = new Set(prev.map((p) => p.name.toLowerCase()));
+      const filteredNew = imported.filter((p) => !existingNames.has(p.name.toLowerCase()));
+      return [...filteredNew, ...prev];
+    });
+    if (imported.length > 0) {
+      setActivePresetId(imported[0].id);
+      if (imported[0].settings) {
+        setSettings((prev) => ({ ...prev, ...imported[0].settings }));
+      }
+    }
+  }, []);
+
+  // Export custom presets to JSON
+  const handleExportPresets = useCallback(() => {
+    exportPresetsToJson(customPresets);
+  }, [customPresets]);
 
   // Live timer interval for batch progress
   useEffect(() => {
@@ -359,6 +439,12 @@ export default function App() {
           isDetectingHole={isDetectingHole}
           activePresetId={activePresetId}
           onSelectPreset={handleSelectPreset}
+          customPresets={customPresets}
+          onSaveCustomPreset={handleSaveCustomPreset}
+          onUpdateCustomPreset={handleUpdateCustomPreset}
+          onDeleteCustomPreset={handleDeleteCustomPreset}
+          onImportPresets={handleImportPresets}
+          onExportPresets={handleExportPresets}
         />
 
         {/* Center Panel: Interactive Live Canvas Preview */}
@@ -382,6 +468,7 @@ export default function App() {
           onSelectFrame={handleSelectFrame}
           onCustomFrameUpload={handleCustomFrameUpload}
           onRemoveFrame={handleRemoveFrame}
+          onRestorePanpacificFrame={handleRestorePanpacificFrame}
           photos={photos}
           selectedPhotoIndex={selectedPhotoIndex}
           onSelectPhotoIndex={setSelectedPhotoIndex}

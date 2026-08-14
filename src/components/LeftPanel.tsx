@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Sliders,
   RotateCcw,
@@ -21,10 +21,19 @@ import {
   ArrowLeft,
   ArrowRight,
   Focus,
+  Plus,
+  Trash2,
+  Edit2,
+  Save,
+  Download,
+  Upload,
+  Layers,
+  FolderPlus,
 } from 'lucide-react';
 import { EditSettings, HoleBoundingBox, Preset } from '../types';
-import { LIGHTROOM_PRESETS } from '../utils/presets';
+import { BUILT_IN_PRESETS, parseImportedPresetsJson } from '../utils/presets';
 import { DEFAULT_EDIT_SETTINGS } from '../utils/sampleAssets';
+import { PresetModal } from './PresetModal';
 
 interface LeftPanelProps {
   settings: EditSettings;
@@ -35,6 +44,12 @@ interface LeftPanelProps {
   isDetectingHole: boolean;
   activePresetId: string;
   onSelectPreset: (preset: Preset) => void;
+  customPresets: Preset[];
+  onSaveCustomPreset: (name: string, color: string, description?: string) => void;
+  onUpdateCustomPreset: (presetId: string, name?: string, color?: string, description?: string) => void;
+  onDeleteCustomPreset: (presetId: string) => void;
+  onImportPresets: (presets: Preset[]) => void;
+  onExportPresets: () => void;
 }
 
 export const LeftPanel: React.FC<LeftPanelProps> = ({
@@ -46,15 +61,37 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   isDetectingHole,
   activePresetId,
   onSelectPreset,
+  customPresets,
+  onSaveCustomPreset,
+  onUpdateCustomPreset,
+  onDeleteCustomPreset,
+  onImportPresets,
+  onExportPresets,
 }) => {
   const [activeTab, setActiveTab] = useState<'lightroom' | 'hole_geometry'>('lightroom');
+  const [presetFilter, setPresetFilter] = useState<'all' | 'builtin' | 'custom'>('all');
   const [isHoleExpanded, setIsHoleExpanded] = useState(false);
   const [nudgeStep, setNudgeStep] = useState<number>(10);
+
+  // Preset Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
+  const [editingPreset, setEditingPreset] = useState<Preset | null>(null);
+
+  // Import file input ref
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSliderChange = (key: keyof EditSettings, value: number | string) => {
     onChangeSettings({
       ...settings,
       [key]: value,
+    });
+  };
+
+  const handleResetSlider = (key: keyof EditSettings, defaultValue: number = 0) => {
+    onChangeSettings({
+      ...settings,
+      [key]: defaultValue,
     });
   };
 
@@ -79,8 +116,98 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     onChangeSettings({ ...settings, scale: 1.0, offsetX: 0, offsetY: 0 });
   };
 
+  // Combine built-in & custom presets
+  const allPresets = [...BUILT_IN_PRESETS, ...customPresets];
+
+  const displayedPresets = allPresets.filter((preset) => {
+    if (presetFilter === 'builtin') return !preset.isCustom;
+    if (presetFilter === 'custom') return preset.isCustom;
+    return true;
+  });
+
+  // Handle open create modal
+  const handleOpenCreateModal = () => {
+    setEditingPreset(null);
+    setModalMode('create');
+    setIsModalOpen(true);
+  };
+
+  // Handle open edit modal
+  const handleOpenEditModal = (preset: Preset, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingPreset(preset);
+    setModalMode('edit');
+    setIsModalOpen(true);
+  };
+
+  // Handle save from modal
+  const handleModalSave = (data: { name: string; color: string; description?: string }) => {
+    if (modalMode === 'create') {
+      onSaveCustomPreset(data.name, data.color, data.description);
+    } else if (editingPreset) {
+      onUpdateCustomPreset(editingPreset.id, data.name, data.color, data.description);
+    }
+  };
+
+  // Quick 1-click update active custom preset with current sliders
+  const handleQuickUpdateActivePreset = (presetId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    onUpdateCustomPreset(presetId);
+  };
+
+  // Handle JSON Import
+  const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string;
+        const imported = parseImportedPresetsJson(content);
+        if (imported.length > 0) {
+          onImportPresets(imported);
+          alert(`Successfully imported ${imported.length} custom preset(s)!`);
+        } else {
+          alert('No valid presets found in this file.');
+        }
+      } catch (err: any) {
+        alert(err.message || 'Failed to import preset file.');
+      }
+    };
+    reader.readAsText(file);
+
+    // Reset input
+    if (e.target) e.target.value = '';
+  };
+
+  // Find currently active preset object
+  const currentActivePreset = allPresets.find((p) => p.id === activePresetId);
+
+  // Check if current settings differ from active preset settings
+  const isSettingsModifiedFromPreset = (() => {
+    if (!currentActivePreset || !currentActivePreset.settings) return false;
+    const ps = currentActivePreset.settings;
+    return (
+      (ps.exposure !== undefined && ps.exposure !== settings.exposure) ||
+      (ps.contrast !== undefined && ps.contrast !== settings.contrast) ||
+      (ps.saturation !== undefined && ps.saturation !== settings.saturation) ||
+      (ps.sharpness !== undefined && ps.sharpness !== settings.sharpness) ||
+      (ps.temperature !== undefined && ps.temperature !== settings.temperature)
+    );
+  })();
+
   return (
     <div className="w-full lg:w-80 xl:w-96 bg-[#111115] border-r border-[#22222a] flex flex-col h-full overflow-hidden select-none">
+      {/* Hidden File Input for Importing Presets */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,application/json"
+        className="hidden"
+        onChange={handleImportFileChange}
+      />
+
       {/* Panel Navigation Tabs */}
       <div className="flex border-b border-[#22222a] bg-[#0E0E11]">
         <button
@@ -112,50 +239,222 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
       <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
         {activeTab === 'lightroom' ? (
           <>
-            {/* Lightroom Presets Bar */}
-            <div>
-              <div className="flex items-center justify-between mb-2.5">
-                <span className="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+            {/* Lightroom Presets Section */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                  Lightroom Presets
-                </span>
-                <span className="text-[10px] text-zinc-500 font-mono">1-Click Look</span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+                    Lightroom Presets
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  {/* Save as Preset Button */}
+                  <button
+                    onClick={handleOpenCreateModal}
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1 shadow-sm shadow-indigo-950/40"
+                    title="Save current sliders as a custom preset"
+                  >
+                    <Plus className="w-3 h-3 stroke-[3]" />
+                    <span>Save Preset</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                {LIGHTROOM_PRESETS.map((preset) => {
+              {/* Filter Tabs & Import/Export Bar */}
+              <div className="flex items-center justify-between gap-1 pt-1 pb-0.5">
+                <div className="flex items-center bg-[#181820] p-0.5 rounded-lg border border-[#262632]">
+                  <button
+                    onClick={() => setPresetFilter('all')}
+                    className={`px-2 py-1 rounded text-[10px] font-semibold transition ${
+                      presetFilter === 'all'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    All ({allPresets.length})
+                  </button>
+                  <button
+                    onClick={() => setPresetFilter('builtin')}
+                    className={`px-2 py-1 rounded text-[10px] font-semibold transition ${
+                      presetFilter === 'builtin'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    Built-in
+                  </button>
+                  <button
+                    onClick={() => setPresetFilter('custom')}
+                    className={`px-2 py-1 rounded text-[10px] font-semibold transition flex items-center gap-1 ${
+                      presetFilter === 'custom'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <span>Custom</span>
+                    {customPresets.length > 0 && (
+                      <span className="w-4 h-4 rounded-full bg-indigo-500/30 text-indigo-300 text-[9px] flex items-center justify-center font-bold">
+                        {customPresets.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
+
+                {/* Import / Export icons */}
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-1.5 rounded-lg bg-[#181820] hover:bg-[#22222c] text-zinc-400 hover:text-zinc-200 border border-[#282834] transition"
+                    title="Import Presets (.json)"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={onExportPresets}
+                    disabled={customPresets.length === 0}
+                    className="p-1.5 rounded-lg bg-[#181820] hover:bg-[#22222c] text-zinc-400 hover:text-zinc-200 border border-[#282834] transition disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Export Custom Presets (.json)"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Modified Notice Bar (if user adjusted sliders while a preset is active) */}
+              {isSettingsModifiedFromPreset && (
+                <div className="bg-amber-500/10 border border-amber-500/20 px-2.5 py-1.5 rounded-lg flex items-center justify-between text-[11px]">
+                  <span className="text-amber-300 font-medium truncate">
+                    Sliders tweaked from &ldquo;{currentActivePreset?.name}&rdquo;
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {currentActivePreset?.isCustom ? (
+                      <button
+                        onClick={(e) => handleQuickUpdateActivePreset(currentActivePreset.id, e)}
+                        className="text-[10px] font-bold text-amber-400 hover:text-white bg-amber-500/20 hover:bg-amber-600 px-2 py-0.5 rounded transition flex items-center gap-1"
+                        title="Update this custom preset with current sliders"
+                      >
+                        <Save className="w-2.5 h-2.5" />
+                        <span>Update</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleOpenCreateModal}
+                        className="text-[10px] font-bold text-indigo-300 hover:text-white bg-indigo-500/20 hover:bg-indigo-600 px-2 py-0.5 rounded transition flex items-center gap-1"
+                        title="Save as new custom preset"
+                      >
+                        <Plus className="w-2.5 h-2.5" />
+                        <span>Save as New</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Preset Cards Grid */}
+              <div className="grid grid-cols-2 gap-2">
+                {displayedPresets.map((preset) => {
                   const isSelected = activePresetId === preset.id;
                   return (
-                    <button
+                    <div
                       key={preset.id}
                       onClick={() => onSelectPreset(preset)}
-                      className={`p-2 rounded-lg border text-left transition relative overflow-hidden flex flex-col justify-between h-16 ${
+                      className={`p-2.5 rounded-xl border text-left transition relative cursor-pointer group flex flex-col justify-between min-h-[72px] ${
                         isSelected
-                          ? 'border-indigo-500 bg-indigo-500/15 text-indigo-200 shadow-md shadow-indigo-950/40'
-                          : 'border-[#262630] bg-[#17171D] hover:border-zinc-700 text-zinc-300 hover:bg-[#1D1D24]'
+                          ? 'border-indigo-500 bg-indigo-500/15 text-indigo-200 shadow-md shadow-indigo-950/40 ring-1 ring-indigo-500/40'
+                          : 'border-[#262630] bg-[#16161D] hover:border-zinc-700 text-zinc-300 hover:bg-[#1C1C24]'
                       }`}
                     >
+                      {/* Top Row: Swatch & Actions */}
                       <div className="flex items-center justify-between w-full">
-                        <div
-                          className="w-2.5 h-2.5 rounded-full"
-                          style={{ backgroundColor: preset.previewColor }}
-                        />
-                        {isSelected && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                        <div className="flex items-center gap-1.5">
+                          <div
+                            className="w-3 h-3 rounded-full shadow-sm"
+                            style={{ backgroundColor: preset.previewColor }}
+                          />
+                          {preset.isCustom && (
+                            <span className="text-[9px] font-mono uppercase bg-indigo-500/20 text-indigo-300 px-1 py-0.2 rounded border border-indigo-500/30">
+                              Custom
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          {isSelected && <Check className="w-3.5 h-3.5 text-indigo-400 shrink-0" />}
+
+                          {/* Actions for Custom Presets */}
+                          {preset.isCustom && (
+                            <div className="flex items-center gap-0.5 opacity-80 group-hover:opacity-100 transition">
+                              <button
+                                onClick={(e) => handleOpenEditModal(preset, e)}
+                                className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/50 transition"
+                                title="Edit Preset Name & Color"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (confirm(`Delete custom preset "${preset.name}"?`)) {
+                                    onDeleteCustomPreset(preset.id);
+                                  }
+                                }}
+                                className="p-1 rounded text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition"
+                                title="Delete Custom Preset"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <span className="text-[11px] font-semibold tracking-tight truncate">
-                        {preset.name}
-                      </span>
-                    </button>
+
+                      {/* Bottom Row: Name & Quick Values */}
+                      <div className="pt-1.5">
+                        <div className="text-xs font-semibold tracking-tight truncate">
+                          {preset.name}
+                        </div>
+                        {preset.description && (
+                          <div className="text-[10px] text-zinc-500 truncate">
+                            {preset.description}
+                          </div>
+                        )}
+                        <div className="text-[9px] text-zinc-500 font-mono flex items-center gap-1.5 pt-0.5">
+                          <span>E:{preset.settings.exposure ?? 0}</span>
+                          <span>C:{preset.settings.contrast ?? 0}</span>
+                          <span>S:{preset.settings.saturation ?? 0}</span>
+                        </div>
+                      </div>
+                    </div>
                   );
                 })}
               </div>
+
+              {displayedPresets.length === 0 && (
+                <div className="py-6 text-center text-zinc-500 bg-[#16161D] rounded-xl border border-[#242430] p-4 space-y-2">
+                  <FolderPlus className="w-6 h-6 text-zinc-600 mx-auto" />
+                  <p className="text-xs text-zinc-400 font-medium">No custom presets saved yet</p>
+                  <p className="text-[11px] text-zinc-500">
+                    Adjust the sliders below and click &ldquo;Save Preset&rdquo; to create your first look!
+                  </p>
+                  <button
+                    onClick={handleOpenCreateModal}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-500 transition"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Create Preset</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             <hr className="border-[#22222a]" />
 
             {/* Sliders Group Header */}
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
                 <Sliders className="w-3.5 h-3.5 text-indigo-400" />
                 Color &amp; Tone Sliders
               </span>
@@ -163,7 +462,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
               <button
                 onClick={handleResetAll}
                 className="text-xs text-zinc-400 hover:text-indigo-400 hover:bg-indigo-500/10 px-2 py-1 rounded transition flex items-center gap-1 font-medium"
-                title="Reset Edits to Default"
+                title="Reset All Edits to Default"
               >
                 <RotateCcw className="w-3 h-3" />
                 <span>Reset All</span>
@@ -179,9 +478,22 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                     <Sun className="w-3.5 h-3.5 text-amber-400" />
                     <span>Exposure</span>
                   </div>
-                  <span className="font-mono font-bold text-indigo-300">
-                    {settings.exposure > 0 ? `+${settings.exposure}` : settings.exposure}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleResetSlider('exposure', 0)}
+                      className={`text-[10px] px-1.5 py-0.5 rounded font-mono transition ${
+                        settings.exposure !== 0
+                          ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
+                          : 'text-zinc-500 opacity-50'
+                      }`}
+                      title="Reset Exposure to 0"
+                    >
+                      0
+                    </button>
+                    <span className="font-mono font-bold text-amber-300 min-w-[32px] text-right">
+                      {settings.exposure > 0 ? `+${settings.exposure}` : settings.exposure}
+                    </span>
+                  </div>
                 </div>
                 <input
                   type="range"
@@ -189,7 +501,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                   max="100"
                   value={settings.exposure}
                   onChange={(e) => handleSliderChange('exposure', Number(e.target.value))}
-                  className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                  className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
                 />
                 <div className="flex justify-between text-[10px] text-zinc-500 font-mono">
                   <span>-100 Dark</span>
@@ -205,9 +517,22 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                     <Contrast className="w-3.5 h-3.5 text-indigo-400" />
                     <span>Contrast</span>
                   </div>
-                  <span className="font-mono font-bold text-indigo-300">
-                    {settings.contrast > 0 ? `+${settings.contrast}` : settings.contrast}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleResetSlider('contrast', 0)}
+                      className={`text-[10px] px-1.5 py-0.5 rounded font-mono transition ${
+                        settings.contrast !== 0
+                          ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30'
+                          : 'text-zinc-500 opacity-50'
+                      }`}
+                      title="Reset Contrast to 0"
+                    >
+                      0
+                    </button>
+                    <span className="font-mono font-bold text-indigo-300 min-w-[32px] text-right">
+                      {settings.contrast > 0 ? `+${settings.contrast}` : settings.contrast}
+                    </span>
+                  </div>
                 </div>
                 <input
                   type="range"
@@ -231,9 +556,22 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                     <Palette className="w-3.5 h-3.5 text-rose-400" />
                     <span>Saturation</span>
                   </div>
-                  <span className="font-mono font-bold text-indigo-300">
-                    {settings.saturation > 0 ? `+${settings.saturation}` : settings.saturation}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleResetSlider('saturation', 0)}
+                      className={`text-[10px] px-1.5 py-0.5 rounded font-mono transition ${
+                        settings.saturation !== 0
+                          ? 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30'
+                          : 'text-zinc-500 opacity-50'
+                      }`}
+                      title="Reset Saturation to 0"
+                    >
+                      0
+                    </button>
+                    <span className="font-mono font-bold text-rose-300 min-w-[32px] text-right">
+                      {settings.saturation > 0 ? `+${settings.saturation}` : settings.saturation}
+                    </span>
+                  </div>
                 </div>
                 <input
                   type="range"
@@ -241,7 +579,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                   max="100"
                   value={settings.saturation}
                   onChange={(e) => handleSliderChange('saturation', Number(e.target.value))}
-                  className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                  className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-rose-500"
                 />
                 <div className="flex justify-between text-[10px] text-zinc-500 font-mono">
                   <span>-100 B&amp;W</span>
@@ -257,9 +595,22 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                     <Zap className="w-3.5 h-3.5 text-cyan-400" />
                     <span>Sharpness</span>
                   </div>
-                  <span className="font-mono font-bold text-indigo-300">
-                    {settings.sharpness > 0 ? `+${settings.sharpness}` : settings.sharpness}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleResetSlider('sharpness', 0)}
+                      className={`text-[10px] px-1.5 py-0.5 rounded font-mono transition ${
+                        settings.sharpness !== 0
+                          ? 'bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30'
+                          : 'text-zinc-500 opacity-50'
+                      }`}
+                      title="Reset Sharpness to 0"
+                    >
+                      0
+                    </button>
+                    <span className="font-mono font-bold text-cyan-300 min-w-[32px] text-right">
+                      {settings.sharpness > 0 ? `+${settings.sharpness}` : settings.sharpness}
+                    </span>
+                  </div>
                 </div>
                 <input
                   type="range"
@@ -267,7 +618,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                   max="100"
                   value={settings.sharpness}
                   onChange={(e) => handleSliderChange('sharpness', Number(e.target.value))}
-                  className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                  className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-cyan-500"
                 />
                 <div className="flex justify-between text-[10px] text-zinc-500 font-mono">
                   <span>-100 Smooth</span>
@@ -283,9 +634,22 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                     <Thermometer className="w-3.5 h-3.5 text-amber-500" />
                     <span>Temperature</span>
                   </div>
-                  <span className="font-mono font-bold text-indigo-300">
-                    {settings.temperature > 0 ? `+${settings.temperature}` : settings.temperature}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleResetSlider('temperature', 0)}
+                      className={`text-[10px] px-1.5 py-0.5 rounded font-mono transition ${
+                        settings.temperature !== 0
+                          ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
+                          : 'text-zinc-500 opacity-50'
+                      }`}
+                      title="Reset Temperature to 0"
+                    >
+                      0
+                    </button>
+                    <span className="font-mono font-bold text-amber-300 min-w-[32px] text-right">
+                      {settings.temperature > 0 ? `+${settings.temperature}` : settings.temperature}
+                    </span>
+                  </div>
                 </div>
                 <input
                   type="range"
@@ -341,7 +705,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                 {(['cover', 'contain', 'fill'] as const).map((mode) => (
                   <button
                     key={mode}
-                    onClick={() => handleSliderChange('fitMode', mode as any)}
+                    onClick={() => handleSliderChange('fitMode', mode)}
                     className={`py-2 px-3 rounded-lg border text-xs font-semibold uppercase tracking-wider transition ${
                       settings.fitMode === mode
                         ? 'border-indigo-500 bg-indigo-500/20 text-indigo-200'
@@ -612,6 +976,25 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           </div>
         )}
       </div>
+
+      {/* Preset Create / Edit Modal */}
+      <PresetModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSave={handleModalSave}
+        initialData={
+          editingPreset
+            ? {
+                name: editingPreset.name,
+                color: editingPreset.previewColor,
+                description: editingPreset.description,
+                id: editingPreset.id,
+              }
+            : null
+        }
+        currentSettings={settings}
+        mode={modalMode}
+      />
     </div>
   );
 };

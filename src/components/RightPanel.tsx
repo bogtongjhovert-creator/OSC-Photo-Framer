@@ -25,6 +25,7 @@ interface RightPanelProps {
   onSelectFrame: (frame: FrameTemplate) => void;
   onCustomFrameUpload: (file: File) => void;
   onRemoveFrame?: (id: string) => void;
+  onRestorePanpacificFrame?: () => void;
   photos: UserPhoto[];
   selectedPhotoIndex: number;
   onSelectPhotoIndex: (index: number) => void;
@@ -45,6 +46,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   onSelectFrame,
   onCustomFrameUpload,
   onRemoveFrame,
+  onRestorePanpacificFrame,
   photos,
   selectedPhotoIndex,
   onSelectPhotoIndex,
@@ -106,7 +108,15 @@ export const RightPanel: React.FC<RightPanelProps> = ({
               <Layers className="w-3.5 h-3.5 text-indigo-400" />
               Zone A: Frame Template
             </span>
-            <span className="text-[10px] text-zinc-500 font-mono">PNG Cutout</span>
+            {onRestorePanpacificFrame && (
+              <button
+                onClick={onRestorePanpacificFrame}
+                className="text-[10px] text-indigo-400 hover:text-indigo-300 font-mono hover:underline flex items-center gap-1"
+                title="Restore Official Panpacific University Frame"
+              >
+                <span>Panpacific Frame</span>
+              </button>
+            )}
           </div>
 
           {/* Drag & Drop Custom Frame Upload Box */}
