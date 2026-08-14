@@ -26,7 +26,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-lg font-bold text-white tracking-wide">
-              AutoFrame <span className="text-indigo-400">Studio Pro</span>
+              OSC <span className="text-indigo-400">AutoFrame Studio</span>
             </h1>
             <span className="bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider">
               150-Batch Engine

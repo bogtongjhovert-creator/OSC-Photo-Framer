@@ -203,7 +203,7 @@ export function exportPresetsToJson(presets: Preset[]): void {
   }
 
   const exportData = {
-    app: 'OSC PHOTO FRAMER',
+    app: 'OSC AutoFrame Studio',
     version: '1.0',
     exportedAt: new Date().toISOString(),
     presets: customPresets,
