@@ -1,11 +1,10 @@
 import React from 'react';
-import { Image, Layers, Sparkles, Trash2, Cpu, FileArchive } from 'lucide-react';
+import { Image, Layers, Trash2, Cpu } from 'lucide-react';
 
 interface HeaderProps {
   photoCount: number;
   maxPhotos: number;
   isProcessing: boolean;
-  onPopulateSamplePhotos: (count: number) => void;
   onClearAllPhotos: () => void;
 }
 
@@ -13,7 +12,6 @@ export const Header: React.FC<HeaderProps> = ({
   photoCount,
   maxPhotos,
   isProcessing,
-  onPopulateSamplePhotos,
   onClearAllPhotos,
 }) => {
   return (
@@ -40,8 +38,8 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Center Stats & Populator */}
-      <div className="hidden md:flex items-center gap-3 bg-[#16161C] px-3.5 py-1.5 rounded-xl border border-[#282832]">
+      {/* Center Stats Bar */}
+      <div className="hidden md:flex items-center gap-3 bg-[#16161C] px-3.5 py-2 rounded-xl border border-[#282832]">
         <div className="flex items-center gap-2 text-xs">
           <Image className="w-4 h-4 text-indigo-400" />
           <span className="text-zinc-300 font-medium">Batch Queue:</span>
@@ -52,33 +50,6 @@ export const Header: React.FC<HeaderProps> = ({
           >
             {photoCount} / {maxPhotos}
           </span>
-        </div>
-
-        <div className="h-4 w-[1px] bg-zinc-700/60" />
-
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-zinc-400">Sample Load:</span>
-          <button
-            onClick={() => onPopulateSamplePhotos(5)}
-            disabled={isProcessing || photoCount >= maxPhotos}
-            className="text-xs bg-[#202028] hover:bg-[#282832] text-zinc-200 px-2.5 py-1 rounded-lg border border-zinc-700/60 transition font-medium disabled:opacity-40"
-          >
-            +5
-          </button>
-          <button
-            onClick={() => onPopulateSamplePhotos(25)}
-            disabled={isProcessing || photoCount >= maxPhotos}
-            className="text-xs bg-indigo-950/80 hover:bg-indigo-900/80 text-indigo-200 px-2.5 py-1 rounded-lg border border-indigo-800/60 transition font-medium disabled:opacity-40"
-          >
-            +25
-          </button>
-          <button
-            onClick={() => onPopulateSamplePhotos(150)}
-            disabled={isProcessing || photoCount >= maxPhotos}
-            className="text-xs bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white px-2.5 py-1 rounded-lg transition font-medium shadow-sm shadow-indigo-950/50 disabled:opacity-40"
-          >
-            Fill 150
-          </button>
         </div>
       </div>
 
@@ -104,4 +75,3 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
-

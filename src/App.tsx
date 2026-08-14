@@ -423,7 +423,6 @@ export default function App() {
         photoCount={photos.length}
         maxPhotos={MAX_PHOTOS}
         isProcessing={isProcessing}
-        onPopulateSamplePhotos={handlePopulateSamplePhotos}
         onClearAllPhotos={handleClearAllPhotos}
       />
 
