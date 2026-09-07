@@ -50,13 +50,38 @@ export default function App() {
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [zipBlob, setZipBlob] = useState<Blob | null>(null);
+  const [autoFitOnUpload, setAutoFitOnUpload] = useState<boolean>(true);
+  const [fitToastMessage, setFitToastMessage] = useState<string | null>(null);
+
+  const showFitToast = useCallback((msg: string) => {
+    setFitToastMessage(msg);
+    setTimeout(() => {
+      setFitToastMessage((curr) => (curr === msg ? null : curr));
+    }, 3500);
+  }, []);
+
+  // Automatically fit photo to frame hole
+  const handleAutoFit = useCallback(
+    (mode?: 'cover' | 'contain' | 'fill') => {
+      const targetMode = mode || settings.fitMode || 'cover';
+      setSettings((prev) => ({
+        ...prev,
+        fitMode: targetMode,
+        scale: 1.0,
+        offsetX: 0,
+        offsetY: 0,
+      }));
+      showFitToast(`⚡ Photo automatically fitted to frame window (${targetMode.toUpperCase()})`);
+    },
+    [settings.fitMode, showFitToast]
+  );
 
   // Automatically save custom presets to localStorage whenever updated
   useEffect(() => {
     saveCustomPresets(customPresets);
   }, [customPresets]);
 
-  // Handle PNG Frame Template Selection & Hole Auto-Detection
+  // Handle PNG/Image Frame Template Selection & Hole Auto-Detection
   const handleSelectFrame = useCallback(async (frame: FrameTemplate) => {
     setSelectedFrame(frame);
     setIsDetectingHole(true);
@@ -64,18 +89,30 @@ export default function App() {
     try {
       const detection = await detectTransparentHole(frame.imageUrl);
       setHole(detection.hole);
+      if (detection.hasSolidCutout) {
+        frame.hasSolidCutout = true;
+      }
     } catch (err) {
       console.error('Hole detection failed, using pre-configured hole:', err);
       setHole(frame.hole);
     } finally {
       setIsDetectingHole(false);
     }
-  }, []);
 
-  // Handle Custom PNG Frame Upload
+    if (autoFitOnUpload) {
+      setSettings((prev) => ({
+        ...prev,
+        scale: 1.0,
+        offsetX: 0,
+        offsetY: 0,
+      }));
+    }
+  }, [autoFitOnUpload]);
+
+  // Handle Custom Frame Upload (Supports PNG with transparency or JPG/WebP)
   const handleCustomFrameUpload = useCallback(async (file: File) => {
-    if (file.type !== 'image/png') {
-      alert('Please upload a PNG image file with a transparent cutout window.');
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file (PNG, JPG, or WebP).');
       return;
     }
 
@@ -90,18 +127,32 @@ export default function App() {
           const newFrame: FrameTemplate = {
             id: `custom_frame_${Date.now()}`,
             name: file.name.replace(/\.[^/.]+$/, ''),
-            description: 'Custom uploaded PNG template',
+            description: detection.detected
+              ? `Cutout detected: ${Math.round(detection.hole.width)}×${Math.round(detection.hole.height)}px`
+              : 'Custom uploaded template',
             category: 'Modern',
             imageUrl: dataUrl,
             hole: detection.hole,
             canvasWidth: img.width,
             canvasHeight: img.height,
             isCustom: true,
+            hasSolidCutout: detection.hasSolidCutout,
           };
 
           setFrames((prev) => [newFrame, ...prev]);
           setSelectedFrame(newFrame);
           setHole(detection.hole);
+
+          // Automatically fit photo to newly uploaded frame
+          if (autoFitOnUpload) {
+            setSettings((prev) => ({
+              ...prev,
+              scale: 1.0,
+              offsetX: 0,
+              offsetY: 0,
+            }));
+            showFitToast(`⚡ Photo automatically fitted to ${newFrame.name}!`);
+          }
         } catch (err) {
           console.error('Error auto-detecting hole for custom upload:', err);
         } finally {
@@ -111,7 +162,7 @@ export default function App() {
       img.src = dataUrl;
     };
     reader.readAsDataURL(file);
-  }, []);
+  }, [autoFitOnUpload, showFitToast]);
 
   // Remove Frame Template
   const handleRemoveFrame = useCallback(
@@ -192,8 +243,19 @@ export default function App() {
         };
         reader.readAsDataURL(file);
       });
+
+      // Automatically reset scale & offset so the newly uploaded photo fits into the frame window
+      if (autoFitOnUpload) {
+        setSettings((prev) => ({
+          ...prev,
+          scale: 1.0,
+          offsetX: 0,
+          offsetY: 0,
+        }));
+        showFitToast('⚡ Uploaded photo automatically fitted to frame cutout window!');
+      }
     },
-    [photos.length, MAX_PHOTOS]
+    [photos.length, MAX_PHOTOS, autoFitOnUpload, showFitToast]
   );
 
   // Populate sample photos up to specified target
@@ -372,7 +434,10 @@ export default function App() {
             averageMsPerItem: avgMs,
             photosPerSecond: pps,
           });
-        }
+        },
+        selectedFrame.canvasWidth,
+        selectedFrame.canvasHeight,
+        selectedFrame.hasSolidCutout
       );
 
       const endTime = Date.now();
@@ -444,6 +509,9 @@ export default function App() {
           onDeleteCustomPreset={handleDeleteCustomPreset}
           onImportPresets={handleImportPresets}
           onExportPresets={handleExportPresets}
+          onAutoFit={handleAutoFit}
+          autoFitOnUpload={autoFitOnUpload}
+          onToggleAutoFitOnUpload={setAutoFitOnUpload}
         />
 
         {/* Center Panel: Interactive Live Canvas Preview */}
@@ -458,6 +526,7 @@ export default function App() {
           onChangeSettings={(newSettings) => setSettings(newSettings)}
           batchProgress={batchProgress}
           isProcessing={isProcessing}
+          onAutoFit={handleAutoFit}
         />
 
         {/* Right Panel: Template Manager & 150-Photo Queue & Batch Action */}
@@ -482,6 +551,14 @@ export default function App() {
           isProcessing={isProcessing}
         />
       </div>
+
+      {/* Floating Auto-Fit Notification Toast */}
+      {fitToastMessage && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-indigo-950/95 border border-indigo-500/50 text-indigo-100 text-xs font-semibold px-4 py-2.5 rounded-full shadow-2xl backdrop-blur-md flex items-center gap-2 z-50 animate-in fade-in slide-in-from-bottom-3 duration-300">
+          <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+          <span>{fitToastMessage}</span>
+        </div>
+      )}
     </div>
   );
 }

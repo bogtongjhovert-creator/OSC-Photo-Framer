@@ -2,20 +2,44 @@ import JSZip from 'jszip';
 import { EditSettings, HoleBoundingBox, UserPhoto } from '../types';
 
 /**
- * Automatically detects the bounding box (x, y, width, height) of the transparent cutout
- * window in a PNG image by scanning the alpha channel.
+ * Automatically detects the bounding box (x, y, width, height) of the cutout
+ * window in a frame image.
+ * 
+ * Supports:
+ * 1. Enclosed transparent inner windows (distinguishing inner photo cutout from outer transparent margins/corners).
+ * 2. Overlay / banner frames with open transparent background.
+ * 3. Opaque frames with solid white or chroma-key cutouts (JPG or non-transparent PNGs).
  */
 export async function detectTransparentHole(
   imageDataUrl: string,
-  alphaThreshold: number = 30
-): Promise<{ hole: HoleBoundingBox; canvasWidth: number; canvasHeight: number; detected: boolean }> {
+  alphaThreshold: number = 35
+): Promise<{
+  hole: HoleBoundingBox;
+  canvasWidth: number;
+  canvasHeight: number;
+  detected: boolean;
+  hasSolidCutout?: boolean;
+}> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
+      const w = img.naturalWidth || img.width;
+      const h = img.naturalHeight || img.height;
+
+      if (!w || !h) {
+        resolve({
+          hole: { x: 100, y: 100, width: 1000, height: 700 },
+          canvasWidth: 1200,
+          canvasHeight: 900,
+          detected: false,
+        });
+        return;
+      }
+
       const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
+      canvas.width = w;
+      canvas.height = h;
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
       if (!ctx) {
@@ -24,57 +48,228 @@ export async function detectTransparentHole(
       }
 
       ctx.drawImage(img, 0, 0);
-      const imgData = ctx.getImageData(0, 0, img.width, img.height);
+      const imgData = ctx.getImageData(0, 0, w, h);
       const data = imgData.data;
 
-      let minX = img.width;
-      let minY = img.height;
-      let maxX = -1;
-      let maxY = -1;
+      const totalPixels = w * h;
+      const isTrans = new Uint8Array(totalPixels);
       let transparentCount = 0;
 
-      for (let y = 0; y < img.height; y++) {
-        for (let x = 0; x < img.width; x++) {
-          const alphaIndex = (y * img.width + x) * 4 + 3;
-          const alpha = data[alphaIndex];
+      for (let i = 0; i < totalPixels; i++) {
+        const a = data[i * 4 + 3];
+        if (a < alphaThreshold) {
+          isTrans[i] = 1;
+          transparentCount++;
+        }
+      }
 
-          if (alpha < alphaThreshold) {
-            transparentCount++;
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-            if (y < minY) minY = y;
-            if (y > maxY) maxY = y;
+      // Case 1: Frame has transparent pixels
+      if (transparentCount > 100) {
+        // Run boundary flood-fill to identify outer transparent pixels (margins, rounded frame corners)
+        const isBorderTrans = new Uint8Array(totalPixels);
+        const queue: number[] = [];
+
+        // Top and bottom borders
+        for (let x = 0; x < w; x++) {
+          const topIdx = x;
+          if (isTrans[topIdx]) {
+            isBorderTrans[topIdx] = 1;
+            queue.push(topIdx);
+          }
+          const btmIdx = (h - 1) * w + x;
+          if (isTrans[btmIdx] && !isBorderTrans[btmIdx]) {
+            isBorderTrans[btmIdx] = 1;
+            queue.push(btmIdx);
+          }
+        }
+
+        // Left and right borders
+        for (let y = 0; y < h; y++) {
+          const leftIdx = y * w;
+          if (isTrans[leftIdx] && !isBorderTrans[leftIdx]) {
+            isBorderTrans[leftIdx] = 1;
+            queue.push(leftIdx);
+          }
+          const rightIdx = y * w + (w - 1);
+          if (isTrans[rightIdx] && !isBorderTrans[rightIdx]) {
+            isBorderTrans[rightIdx] = 1;
+            queue.push(rightIdx);
+          }
+        }
+
+        // BFS flood fill from border transparent pixels
+        let head = 0;
+        while (head < queue.length) {
+          const curr = queue[head++];
+          const cy = Math.floor(curr / w);
+          const cx = curr % w;
+
+          // 4-neighborhood
+          if (cx > 0) {
+            const left = curr - 1;
+            if (isTrans[left] && !isBorderTrans[left]) {
+              isBorderTrans[left] = 1;
+              queue.push(left);
+            }
+          }
+          if (cx < w - 1) {
+            const right = curr + 1;
+            if (isTrans[right] && !isBorderTrans[right]) {
+              isBorderTrans[right] = 1;
+              queue.push(right);
+            }
+          }
+          if (cy > 0) {
+            const up = curr - w;
+            if (isTrans[up] && !isBorderTrans[up]) {
+              isBorderTrans[up] = 1;
+              queue.push(up);
+            }
+          }
+          if (cy < h - 1) {
+            const down = curr + w;
+            if (isTrans[down] && !isBorderTrans[down]) {
+              isBorderTrans[down] = 1;
+              queue.push(down);
+            }
+          }
+        }
+
+        // Check if there are inner transparent pixels enclosed by opaque frame borders
+        let innerMinX = w;
+        let innerMinY = h;
+        let innerMaxX = -1;
+        let innerMaxY = -1;
+        let innerCount = 0;
+
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const idx = y * w + x;
+            if (isTrans[idx] && !isBorderTrans[idx]) {
+              innerCount++;
+              if (x < innerMinX) innerMinX = x;
+              if (x > innerMaxX) innerMaxX = x;
+              if (y < innerMinY) innerMinY = y;
+              if (y > innerMaxY) innerMaxY = y;
+            }
+          }
+        }
+
+        // If enclosed inner cutout found (> 0.1% of pixels or > 150px)
+        if (innerCount > Math.max(150, Math.round(totalPixels * 0.001)) && innerMaxX > innerMinX && innerMaxY > innerMinY) {
+          resolve({
+            hole: {
+              x: innerMinX,
+              y: innerMinY,
+              width: innerMaxX - innerMinX + 1,
+              height: innerMaxY - innerMinY + 1,
+            },
+            canvasWidth: w,
+            canvasHeight: h,
+            detected: true,
+          });
+          return;
+        }
+
+        // Otherwise (open overlay frame or transparent canvas with corner badges like Panpacific)
+        let allMinX = w;
+        let allMinY = h;
+        let allMaxX = -1;
+        let allMaxY = -1;
+
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const idx = y * w + x;
+            if (isTrans[idx]) {
+              if (x < allMinX) allMinX = x;
+              if (x > allMaxX) allMaxX = x;
+              if (y < allMinY) allMinY = y;
+              if (y > allMaxY) allMaxY = y;
+            }
+          }
+        }
+
+        if (allMaxX > allMinX && allMaxY > allMinY) {
+          resolve({
+            hole: {
+              x: allMinX,
+              y: allMinY,
+              width: allMaxX - allMinX + 1,
+              height: allMaxY - allMinY + 1,
+            },
+            canvasWidth: w,
+            canvasHeight: h,
+            detected: true,
+          });
+          return;
+        }
+      }
+
+      // Case 2: No transparent pixels (Opaque frame like JPG or solid PNG)
+      // Check for solid white (r,g,b > 240) or chroma-green cutout rectangle in center region
+      let solidMinX = w;
+      let solidMinY = h;
+      let solidMaxX = -1;
+      let solidMaxY = -1;
+      let solidCount = 0;
+
+      // Scan middle 80%
+      const startX = Math.round(w * 0.05);
+      const endX = Math.round(w * 0.95);
+      const startY = Math.round(h * 0.05);
+      const endY = Math.round(h * 0.95);
+
+      for (let y = startY; y < endY; y += 2) {
+        for (let x = startX; x < endX; x += 2) {
+          const idx = (y * w + x) * 4;
+          const r = data[idx];
+          const g = data[idx + 1];
+          const b = data[idx + 2];
+
+          // Near white box OR chroma key green box
+          const isNearWhite = r > 242 && g > 242 && b > 242;
+          const isChromaGreen = g > 210 && r < 70 && b < 70;
+
+          if (isNearWhite || isChromaGreen) {
+            solidCount++;
+            if (x < solidMinX) solidMinX = x;
+            if (x > solidMaxX) solidMaxX = x;
+            if (y < solidMinY) solidMinY = y;
+            if (y > solidMaxY) solidMaxY = y;
           }
         }
       }
 
-      if (transparentCount === 0 || maxX < minX || maxY < minY) {
-        // Fallback default hole in center if no transparent window
-        const fallback = {
-          x: Math.round(img.width * 0.1),
-          y: Math.round(img.height * 0.1),
-          width: Math.round(img.width * 0.8),
-          height: Math.round(img.height * 0.8),
-        };
+      // If solid cutout box was detected (> 5% of pixels)
+      if (solidCount > Math.round((endX - startX) * (endY - startY) * 0.05) && solidMaxX > solidMinX + 50 && solidMaxY > solidMinY + 50) {
         resolve({
-          hole: fallback,
-          canvasWidth: img.width,
-          canvasHeight: img.height,
-          detected: false,
+          hole: {
+            x: solidMinX,
+            y: solidMinY,
+            width: solidMaxX - solidMinX + 1,
+            height: solidMaxY - solidMinY + 1,
+          },
+          canvasWidth: w,
+          canvasHeight: h,
+          detected: true,
+          hasSolidCutout: true,
         });
         return;
       }
 
+      // Fallback default hole in center if no transparent or solid window
+      const fallback = {
+        x: Math.round(w * 0.08),
+        y: Math.round(h * 0.08),
+        width: Math.round(w * 0.84),
+        height: Math.round(h * 0.84),
+      };
       resolve({
-        hole: {
-          x: minX,
-          y: minY,
-          width: maxX - minX + 1,
-          height: maxY - minY + 1,
-        },
-        canvasWidth: img.width,
-        canvasHeight: img.height,
-        detected: true,
+        hole: fallback,
+        canvasWidth: w,
+        canvasHeight: h,
+        detected: false,
+        hasSolidCutout: true,
       });
     };
 
@@ -227,15 +422,18 @@ export async function renderFramedPhotoCanvas(
   hole: HoleBoundingBox,
   settings: EditSettings,
   outputWidth?: number,
-  outputHeight?: number
+  outputHeight?: number,
+  hasSolidCutout?: boolean
 ): Promise<HTMLCanvasElement> {
   return new Promise((resolve, reject) => {
     const photoImg = new Image();
     photoImg.crossOrigin = 'anonymous';
 
     photoImg.onload = () => {
-      const canvasW = outputWidth || templateImg.width || 1200;
-      const canvasH = outputHeight || templateImg.height || 900;
+      const naturalW = templateImg.naturalWidth || templateImg.width || 1200;
+      const naturalH = templateImg.naturalHeight || templateImg.height || 900;
+      const canvasW = outputWidth || naturalW;
+      const canvasH = outputHeight || naturalH;
 
       const canvas = document.createElement('canvas');
       canvas.width = canvasW;
@@ -251,18 +449,18 @@ export async function renderFramedPhotoCanvas(
       ctx.imageSmoothingQuality = 'high';
 
       // Scale factor if template image was resized
-      const scaleX = canvasW / (templateImg.width || canvasW);
-      const scaleY = canvasH / (templateImg.height || canvasH);
+      const scaleX = canvasW / naturalW;
+      const scaleY = canvasH / naturalH;
 
-      const holeX = hole.x * scaleX;
-      const holeY = hole.y * scaleY;
-      const holeW = hole.width * scaleX;
-      const holeH = hole.height * scaleY;
+      const holeX = Math.round(hole.x * scaleX);
+      const holeY = Math.round(hole.y * scaleY);
+      const holeW = Math.max(1, Math.round(hole.width * scaleX));
+      const holeH = Math.max(1, Math.round(hole.height * scaleY));
 
       // 1. Prepare temporary photo canvas for ImageOps.fit() / cover scaling inside cutout hole
       const photoCanvas = document.createElement('canvas');
-      photoCanvas.width = Math.round(holeW);
-      photoCanvas.height = Math.round(holeH);
+      photoCanvas.width = holeW;
+      photoCanvas.height = holeH;
       const photoCtx = photoCanvas.getContext('2d');
 
       if (photoCtx) {
@@ -270,8 +468,8 @@ export async function renderFramedPhotoCanvas(
         photoCtx.imageSmoothingQuality = 'high';
 
         // Calculate ImageOps.fit / Object-Fit Cover
-        const srcW = photoImg.width;
-        const srcH = photoImg.height;
+        const srcW = photoImg.naturalWidth || photoImg.width;
+        const srcH = photoImg.naturalHeight || photoImg.height;
 
         const photoAspect = srcW / srcH;
         const holeAspect = holeW / holeH;
@@ -280,6 +478,7 @@ export async function renderFramedPhotoCanvas(
         let renderH = holeH;
 
         if (settings.fitMode === 'cover') {
+          // Cover: Fill entire hole without empty gaps
           if (photoAspect > holeAspect) {
             renderH = holeH;
             renderW = holeH * photoAspect;
@@ -288,6 +487,7 @@ export async function renderFramedPhotoCanvas(
             renderH = holeW / photoAspect;
           }
         } else if (settings.fitMode === 'contain') {
+          // Contain: Fit entire photo within hole bounds
           if (photoAspect > holeAspect) {
             renderW = holeW;
             renderH = holeW / photoAspect;
@@ -295,20 +495,28 @@ export async function renderFramedPhotoCanvas(
             renderH = holeH;
             renderW = holeH * photoAspect;
           }
+        } else {
+          // Fill: Exact fit to hole dimensions
+          renderW = holeW;
+          renderH = holeH;
         }
 
         // Apply scale zoom and offset shift
-        renderW *= settings.scale;
-        renderH *= settings.scale;
+        const scaleMultiplier = typeof settings.scale === 'number' && !isNaN(settings.scale) ? settings.scale : 1.0;
+        renderW *= scaleMultiplier;
+        renderH *= scaleMultiplier;
 
-        const renderX = (holeW - renderW) / 2 + settings.offsetX;
-        const renderY = (holeH - renderH) / 2 + settings.offsetY;
+        const userOffsetX = typeof settings.offsetX === 'number' && !isNaN(settings.offsetX) ? settings.offsetX : 0;
+        const userOffsetY = typeof settings.offsetY === 'number' && !isNaN(settings.offsetY) ? settings.offsetY : 0;
+
+        const renderX = (holeW - renderW) / 2 + userOffsetX;
+        const renderY = (holeH - renderH) / 2 + userOffsetY;
 
         // Draw photo onto photo canvas
         photoCtx.drawImage(photoImg, renderX, renderY, renderW, renderH);
 
         // Apply Lightroom Adjustments
-        applyLightroomAdjustments(photoCtx, Math.round(holeW), Math.round(holeH), settings);
+        applyLightroomAdjustments(photoCtx, holeW, holeH, settings);
 
         // Handle Corner Radius clipping on window cutout if specified
         if (settings.cornerRadius > 0) {
@@ -329,7 +537,24 @@ export async function renderFramedPhotoCanvas(
       }
 
       // 2. Overlay Frame Template on top (Layer 2)
-      ctx.drawImage(templateImg, 0, 0, canvasW, canvasH);
+      if (hasSolidCutout) {
+        // For frames with solid/opaque cutouts (e.g. JPG or non-transparent PNG), punch out hole on frame layer
+        const frameCanvas = document.createElement('canvas');
+        frameCanvas.width = canvasW;
+        frameCanvas.height = canvasH;
+        const fCtx = frameCanvas.getContext('2d');
+        if (fCtx) {
+          fCtx.drawImage(templateImg, 0, 0, canvasW, canvasH);
+          fCtx.clearRect(holeX, holeY, holeW, holeH);
+          ctx.drawImage(frameCanvas, 0, 0);
+          frameCanvas.width = 1;
+          frameCanvas.height = 1;
+        } else {
+          ctx.drawImage(templateImg, 0, 0, canvasW, canvasH);
+        }
+      } else {
+        ctx.drawImage(templateImg, 0, 0, canvasW, canvasH);
+      }
 
       resolve(canvas);
     };
@@ -348,7 +573,10 @@ export async function batchProcessPhotos(
   templateImgUrl: string,
   hole: HoleBoundingBox,
   settings: EditSettings,
-  onProgress: (completedCount: number, currentPhotoName: string, itemProgress?: number) => void
+  onProgress: (completedCount: number, currentPhotoName: string, itemProgress?: number) => void,
+  canvasWidth?: number,
+  canvasHeight?: number,
+  hasSolidCutout?: boolean
 ): Promise<{ zipBlob: Blob; processedPhotos: UserPhoto[] }> {
   // Preload frame template image
   const templateImg = new Image();
@@ -379,7 +607,10 @@ export async function batchProcessPhotos(
             photo.dataUrl,
             templateImg,
             hole,
-            settings
+            settings,
+            canvasWidth,
+            canvasHeight,
+            hasSolidCutout
           );
 
           // Convert canvas to PNG Blob

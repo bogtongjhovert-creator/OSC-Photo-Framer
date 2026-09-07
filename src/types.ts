@@ -15,6 +15,7 @@ export interface FrameTemplate {
   canvasWidth: number;
   canvasHeight: number;
   isCustom?: boolean;
+  hasSolidCutout?: boolean;
 }
 
 export interface EditSettings {

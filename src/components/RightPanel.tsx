@@ -71,10 +71,10 @@ export const RightPanel: React.FC<RightPanelProps> = ({
     setIsDraggingFrame(false);
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
-      if (files[0].type === 'image/png') {
+      if (files[0].type.startsWith('image/')) {
         onCustomFrameUpload(files[0]);
       } else {
-        alert('Please upload a PNG frame template with a transparent cutout window.');
+        alert('Please upload an image frame template (PNG, JPG, or WebP).');
       }
     }
   };
@@ -137,17 +137,17 @@ export const RightPanel: React.FC<RightPanelProps> = ({
             <input
               ref={frameInputRef}
               type="file"
-              accept="image/png"
+              accept="image/png, image/jpeg, image/webp"
               className="hidden"
               onChange={(e) => e.target.files?.[0] && onCustomFrameUpload(e.target.files[0])}
             />
             <div className="flex flex-col items-center gap-1.5">
               <Upload className="w-5 h-5 text-indigo-400" />
               <span className="text-xs font-semibold text-zinc-200">
-                Upload Custom Frame (PNG)
+                Upload Frame (PNG / JPG / WebP)
               </span>
               <span className="text-[10px] text-zinc-500">
-                Transparent window will be auto-detected
+                Cutout window auto-detected &amp; photo automatically fitted
               </span>
             </div>
           </div>
@@ -157,7 +157,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
             <div className="p-4 rounded-xl border border-dashed border-[#262630] bg-[#14141A] text-center space-y-1">
               <p className="text-xs font-semibold text-zinc-400">No Frame Templates Loaded</p>
               <p className="text-[10px] text-zinc-500">
-                Upload your PNG frame template above with a transparent window to get started.
+                Upload your frame template above to get started. Photo will automatically fit!
               </p>
             </div>
           ) : (

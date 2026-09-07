@@ -50,6 +50,9 @@ interface LeftPanelProps {
   onDeleteCustomPreset: (presetId: string) => void;
   onImportPresets: (presets: Preset[]) => void;
   onExportPresets: () => void;
+  onAutoFit?: (mode?: 'cover' | 'contain' | 'fill') => void;
+  autoFitOnUpload?: boolean;
+  onToggleAutoFitOnUpload?: (enabled: boolean) => void;
 }
 
 export const LeftPanel: React.FC<LeftPanelProps> = ({
@@ -67,6 +70,9 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   onDeleteCustomPreset,
   onImportPresets,
   onExportPresets,
+  onAutoFit,
+  autoFitOnUpload = true,
+  onToggleAutoFitOnUpload,
 }) => {
   const [activeTab, setActiveTab] = useState<'lightroom' | 'hole_geometry'>('lightroom');
   const [presetFilter, setPresetFilter] = useState<'all' | 'builtin' | 'custom'>('all');
@@ -693,6 +699,58 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                 <Scan className="w-3.5 h-3.5 animate-spin-slow" />
                 <span>{isDetectingHole ? 'Scanning Alpha Channel...' : 'Re-Detect Cutout Window'}</span>
               </button>
+            </div>
+
+            {/* Automatic Frame Fit Card */}
+            <div className="space-y-2.5 bg-gradient-to-b from-[#191924] to-[#14141B] p-3 rounded-xl border border-indigo-500/30 shadow-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                  <span>Auto-Fit Photo to Frame</span>
+                </span>
+                {onToggleAutoFitOnUpload && (
+                  <label className="flex items-center gap-1.5 cursor-pointer" title="Automatically fit photos when uploaded or when frame changes">
+                    <input
+                      type="checkbox"
+                      checked={autoFitOnUpload}
+                      onChange={(e) => onToggleAutoFitOnUpload(e.target.checked)}
+                      className="rounded border-zinc-700 bg-zinc-900 text-indigo-600 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5"
+                    />
+                    <span className="text-[10px] text-zinc-400 font-medium">Auto on upload</span>
+                  </label>
+                )}
+              </div>
+
+              <p className="text-[10px] text-zinc-400 leading-tight">
+                Instantly scales and centers your photo to fill the detected frame cutout window without gaps or distortion.
+              </p>
+
+              {onAutoFit && (
+                <div className="grid grid-cols-3 gap-1.5 pt-1">
+                  <button
+                    onClick={() => onAutoFit('cover')}
+                    className="py-1.5 px-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold transition flex items-center justify-center gap-1 shadow-sm"
+                    title="Auto-Fit Cover: Fills cutout window completely"
+                  >
+                    <Maximize2 className="w-3 h-3" />
+                    <span>Fit (Cover)</span>
+                  </button>
+                  <button
+                    onClick={() => onAutoFit('contain')}
+                    className="py-1.5 px-2 rounded-lg bg-[#22222E] hover:bg-[#2C2C3C] text-zinc-200 border border-[#333344] text-[11px] font-semibold transition"
+                    title="Auto-Fit Contain: Fits whole photo inside without clipping"
+                  >
+                    <span>Contain</span>
+                  </button>
+                  <button
+                    onClick={() => onAutoFit('fill')}
+                    className="py-1.5 px-2 rounded-lg bg-[#22222E] hover:bg-[#2C2C3C] text-zinc-200 border border-[#333344] text-[11px] font-semibold transition"
+                    title="Auto-Fit Stretch: Exact match to window bounds"
+                  >
+                    <span>Stretch</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Fit Mode Selector */}
