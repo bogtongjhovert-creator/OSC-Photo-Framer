@@ -13,6 +13,7 @@ import {
 } from './types';
 import {
   generateSamplePhotos,
+  generateSampleFrames,
   createPanpacificUniversityFrame,
   DEFAULT_EDIT_SETTINGS,
 } from './utils/sampleAssets';
@@ -26,14 +27,22 @@ import {
   detectTransparentHole,
   batchProcessPhotos,
 } from './utils/imageProcessing';
+import { isHeicFile, readFileToDataUrl } from './utils/heicHelper';
 
 export default function App() {
   const MAX_PHOTOS = 150;
 
-  // Initial Sample Data (Empty by default)
-  const [frames, setFrames] = useState<FrameTemplate[]>([]);
-  const [selectedFrame, setSelectedFrame] = useState<FrameTemplate | null>(null);
-  const [hole, setHole] = useState<HoleBoundingBox>({ x: 150, y: 150, width: 900, height: 600 });
+  // Initial Sample Frames (Default Panpacific University in Color & B&W)
+  const [frames, setFrames] = useState<FrameTemplate[]>(() => generateSampleFrames());
+  const [boxesMode, setBoxesMode] = useState<'color' | 'bw'>('color');
+  const [selectedFrame, setSelectedFrame] = useState<FrameTemplate | null>(() => {
+    const initialFrames = generateSampleFrames();
+    return initialFrames[0] || null;
+  });
+  const [hole, setHole] = useState<HoleBoundingBox>(() => {
+    const initialFrames = generateSampleFrames();
+    return initialFrames[0]?.hole || { x: 0, y: 0, width: 1920, height: 1080 };
+  });
   const [isDetectingHole, setIsDetectingHole] = useState(false);
 
   const [photos, setPhotos] = useState<UserPhoto[]>([]);
@@ -109,19 +118,46 @@ export default function App() {
     }
   }, [autoFitOnUpload]);
 
-  // Handle Custom Frame Upload (Supports PNG with transparency or JPG/WebP)
+  // Toggle SDG & Core Value boxes mode (Color vs Black & White)
+  const handleToggleBoxesMode = useCallback(
+    (mode: 'color' | 'bw') => {
+      setBoxesMode(mode);
+      const targetFrame = createPanpacificUniversityFrame(mode);
+
+      // Keep both variants accessible in templates list
+      setFrames((prev) => {
+        const withoutPanpacific = prev.filter((f) => !f.id.startsWith('frame_panpacific'));
+        const colorFrame = createPanpacificUniversityFrame('color');
+        const bwFrame = createPanpacificUniversityFrame('bw');
+        return mode === 'color'
+          ? [colorFrame, bwFrame, ...withoutPanpacific]
+          : [bwFrame, colorFrame, ...withoutPanpacific];
+      });
+
+      setSelectedFrame(targetFrame);
+      setHole(targetFrame.hole);
+      showFitToast(
+        `⚡ Frame Boxes switched to ${mode === 'bw' ? 'BLACK & WHITE' : 'FULL COLOR'}`
+      );
+    },
+    [showFitToast]
+  );
+
+  // Handle Custom Frame Upload (Supports PNG, JPG, WebP, and iPhone HEIC/HEIF)
   const handleCustomFrameUpload = useCallback(async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file (PNG, JPG, or WebP).');
+    if (!file.type.startsWith('image/') && !isHeicFile(file)) {
+      alert('Please upload an image file (PNG, JPG, WebP, or HEIC).');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const dataUrl = e.target?.result as string;
+    setIsDetectingHole(true);
+    try {
+      if (isHeicFile(file)) {
+        showFitToast(`Converting iPhone HEIC frame "${file.name}"...`);
+      }
+      const dataUrl = await readFileToDataUrl(file);
       const img = new Image();
       img.onload = async () => {
-        setIsDetectingHole(true);
         try {
           const detection = await detectTransparentHole(dataUrl);
           const newFrame: FrameTemplate = {
@@ -160,8 +196,11 @@ export default function App() {
         }
       };
       img.src = dataUrl;
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      console.error('Error loading custom frame:', err);
+      setIsDetectingHole(false);
+      alert(`Could not load custom frame "${file.name}": ${err.message || 'Error reading image'}`);
+    }
   }, [autoFitOnUpload, showFitToast]);
 
   // Remove Frame Template
@@ -185,7 +224,7 @@ export default function App() {
 
   // Restore Official Panpacific University Frame
   const handleRestorePanpacificFrame = useCallback(() => {
-    const panpacificFrame = createPanpacificUniversityFrame();
+    const panpacificFrame = createPanpacificUniversityFrame(boxesMode);
     setFrames((prev) => {
       const exists = prev.some((f) => f.id === panpacificFrame.id);
       if (!exists) {
@@ -195,7 +234,9 @@ export default function App() {
     });
     setSelectedFrame(panpacificFrame);
     setHole(panpacificFrame.hole);
-  }, []);
+    showFitToast(`⚡ Restored Official Panpacific University Frame (${boxesMode.toUpperCase()})`);
+  }, [boxesMode, showFitToast]);
+
   // Re-detect hole on demand
   const handleDetectHole = useCallback(async () => {
     if (!selectedFrame) return;
@@ -210,9 +251,9 @@ export default function App() {
     }
   }, [selectedFrame]);
 
-  // Handle Photo Uploads (Max 150 limit)
+  // Handle Photo Uploads (Supports PNG, JPG, WebP, and iPhone HEIC/HEIF up to 150 limit)
   const handleUploadPhotos = useCallback(
-    (files: FileList | File[]) => {
+    async (files: FileList | File[]) => {
       const newFiles = Array.from(files);
       const remainingSlots = MAX_PHOTOS - photos.length;
 
@@ -223,10 +264,12 @@ export default function App() {
 
       const filesToProcess = newFiles.slice(0, remainingSlots);
 
-      filesToProcess.forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const dataUrl = e.target?.result as string;
+      for (const file of filesToProcess) {
+        try {
+          if (isHeicFile(file)) {
+            showFitToast(`Converting iPhone HEIC photo "${file.name}"...`);
+          }
+          const dataUrl = await readFileToDataUrl(file);
           const newPhoto: UserPhoto = {
             id: `photo_${Date.now()}_${Math.random()}`,
             name: file.name,
@@ -240,9 +283,11 @@ export default function App() {
             if (prev.length >= MAX_PHOTOS) return prev;
             return [...prev, newPhoto];
           });
-        };
-        reader.readAsDataURL(file);
-      });
+        } catch (err: any) {
+          console.error('Failed to read photo:', err);
+          showFitToast(`⚠️ Error loading ${file.name}: ${err.message || 'HEIC decoding error'}`);
+        }
+      }
 
       // Automatically reset scale & offset so the newly uploaded photo fits into the frame window
       if (autoFitOnUpload) {
@@ -512,6 +557,8 @@ export default function App() {
           onAutoFit={handleAutoFit}
           autoFitOnUpload={autoFitOnUpload}
           onToggleAutoFitOnUpload={setAutoFitOnUpload}
+          boxesMode={boxesMode}
+          onToggleBoxesMode={handleToggleBoxesMode}
         />
 
         {/* Center Panel: Interactive Live Canvas Preview */}
@@ -527,6 +574,8 @@ export default function App() {
           batchProgress={batchProgress}
           isProcessing={isProcessing}
           onAutoFit={handleAutoFit}
+          boxesMode={boxesMode}
+          onToggleBoxesMode={handleToggleBoxesMode}
         />
 
         {/* Right Panel: Template Manager & 150-Photo Queue & Batch Action */}
@@ -549,6 +598,8 @@ export default function App() {
           onDownloadZip={handleDownloadZip}
           zipBlob={zipBlob}
           isProcessing={isProcessing}
+          boxesMode={boxesMode}
+          onToggleBoxesMode={handleToggleBoxesMode}
         />
       </div>
 

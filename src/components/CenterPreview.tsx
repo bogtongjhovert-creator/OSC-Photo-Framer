@@ -38,6 +38,8 @@ interface CenterPreviewProps {
   batchProgress?: BatchProgress;
   isProcessing?: boolean;
   onAutoFit?: (mode?: 'cover' | 'contain' | 'fill') => void;
+  boxesMode?: 'color' | 'bw';
+  onToggleBoxesMode?: (mode: 'color' | 'bw') => void;
 }
 
 export const CenterPreview: React.FC<CenterPreviewProps> = ({
@@ -52,6 +54,8 @@ export const CenterPreview: React.FC<CenterPreviewProps> = ({
   batchProgress,
   isProcessing = false,
   onAutoFit,
+  boxesMode = 'color',
+  onToggleBoxesMode,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -327,6 +331,37 @@ export const CenterPreview: React.FC<CenterPreviewProps> = ({
                 </button>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* SDG & Core Value Boxes Color / B&W Quick Button Selection */}
+        {onToggleBoxesMode && (
+          <div className="flex items-center gap-1 bg-[#17171E] px-2 py-1 rounded-xl border border-zinc-700/60 shadow-sm">
+            <span className="text-[10px] font-bold text-zinc-400 pl-1 uppercase tracking-wider">Boxes:</span>
+            <button
+              type="button"
+              onClick={() => onToggleBoxesMode('color')}
+              className={`px-2 py-0.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                boxesMode === 'color'
+                  ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-400/50'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+              title="Display UN SDG and Core Value boxes in full color"
+            >
+              <span>🎨 Color</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onToggleBoxesMode('bw')}
+              className={`px-2 py-0.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                boxesMode === 'bw'
+                  ? 'bg-zinc-700 text-white shadow-sm ring-1 ring-zinc-400/50'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+              title="Display UN SDG and Core Value boxes in black & white"
+            >
+              <span>⚪ B&W</span>
+            </button>
           </div>
         )}
 

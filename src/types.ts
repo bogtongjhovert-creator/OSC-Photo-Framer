@@ -16,6 +16,7 @@ export interface FrameTemplate {
   canvasHeight: number;
   isCustom?: boolean;
   hasSolidCutout?: boolean;
+  boxesMode?: 'color' | 'bw';
 }
 
 export interface EditSettings {
@@ -29,6 +30,7 @@ export interface EditSettings {
   offsetX: number; // -200 to 200
   offsetY: number; // -200 to 200
   cornerRadius: number; // 0 to 60
+  boxesColorMode?: 'color' | 'bw';
 }
 
 export interface UserPhoto {

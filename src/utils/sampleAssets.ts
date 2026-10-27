@@ -13,8 +13,8 @@ export const DEFAULT_EDIT_SETTINGS: EditSettings = {
   cornerRadius: 0,
 };
 
-// Generate sample PNG frame templates (Includes permanent Panpacific University official frame)
-export function createPanpacificUniversityFrame(): FrameTemplate {
+// Generate sample PNG frame templates (Includes Panpacific University official frame in Color and B&W)
+export function createPanpacificUniversityFrame(boxesMode: 'color' | 'bw' = 'color'): FrameTemplate {
   const canvas = document.createElement('canvas');
   canvas.width = 1920;
   canvas.height = 1080;
@@ -113,10 +113,10 @@ export function createPanpacificUniversityFrame(): FrameTemplate {
     ctx.stroke();
 
     // --- ROW 1: ACCREDITATION & UNIVERSITY SEALS (Y ~ 925) ---
-    // Seal 1: 33 ONE PANPACIFIC Anniversary Logo
+    // Seal 1: 30/33 ONE PANPACIFIC Anniversary Logo
     ctx.fillStyle = '#E91E63';
     ctx.font = 'bold 24px sans-serif';
-    ctx.fillText('33', 70, 928);
+    ctx.fillText('30', 70, 928);
     ctx.font = 'bold 10px sans-serif';
     ctx.fillStyle = '#1D5D3A';
     ctx.fillText('ONE PANPACIFIC', 70, 942);
@@ -194,35 +194,49 @@ export function createPanpacificUniversityFrame(): FrameTemplate {
     ctx.arc(648, 928, 14, 0, Math.PI * 2);
     ctx.fill();
 
-    // --- UN SDG 17 BOXES GRID (Far Right, X: 1420) ---
+    // --- UN SDG 17 BOXES GRID (Starting at X: 1240) ---
     const sdgColors = [
       '#E5243B', '#DDA63A', '#4C9F38', '#C5192D', '#FF3A21', '#26BDE2', '#FCC30B', '#A21942',
       '#FD6925', '#DD1367', '#FD9D24', '#BF8B2E', '#3F7E44', '#0A97D9', '#56C02B', '#00689D', '#19486A'
     ];
 
-    const sdgStartX = 1420;
-    const sdgBoxW = 48;
+    const sdgStartX = 1270;
+    const sdgBoxW = 46;
     const sdgBoxH = 34;
-    const sdgGap = 5;
+    const sdgGap = 4;
+
+    const isBW = boxesMode === 'bw';
 
     ctx.textAlign = 'center';
     ctx.font = 'bold 10px sans-serif';
 
     // SDG Header Box
-    ctx.fillStyle = '#0288D1';
-    ctx.fillRect(sdgStartX - 55, 898, 50, 73);
+    ctx.fillStyle = isBW ? '#181822' : '#0288D1';
+    ctx.fillRect(sdgStartX - 54, 898, 50, 72);
+    if (isBW) {
+      ctx.strokeStyle = '#383848';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sdgStartX - 54, 898, 50, 72);
+    }
     ctx.fillStyle = '#FFFFFF';
     ctx.font = 'bold 8px sans-serif';
-    ctx.fillText('SUSTAINABLE', sdgStartX - 30, 920);
-    ctx.fillText('DEVELOPMENT', sdgStartX - 30, 932);
-    ctx.fillText('GOALS', sdgStartX - 30, 944);
+    ctx.fillText('SUSTAINABLE', sdgStartX - 29, 920);
+    ctx.fillText('DEVELOPMENT', sdgStartX - 29, 932);
+    ctx.fillText('GOALS', sdgStartX - 29, 944);
 
     // Row 1 (SDGs 1-8)
     for (let i = 0; i < 8; i++) {
       const bx = sdgStartX + i * (sdgBoxW + sdgGap);
       const by = 898;
-      ctx.fillStyle = sdgColors[i];
+      ctx.fillStyle = isBW ? '#181822' : sdgColors[i];
       ctx.fillRect(bx, by, sdgBoxW, sdgBoxH);
+
+      if (isBW) {
+        ctx.strokeStyle = '#383848';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx, by, sdgBoxW, sdgBoxH);
+      }
+
       ctx.fillStyle = '#FFFFFF';
       ctx.font = 'bold 12px sans-serif';
       ctx.fillText(`${i + 1}`, bx + sdgBoxW / 2, by + 22);
@@ -233,12 +247,50 @@ export function createPanpacificUniversityFrame(): FrameTemplate {
       const col = i - 8;
       const bx = sdgStartX + col * (sdgBoxW + sdgGap);
       const by = 898 + sdgBoxH + sdgGap;
-      ctx.fillStyle = sdgColors[i];
+      ctx.fillStyle = isBW ? '#181822' : sdgColors[i];
       ctx.fillRect(bx, by, sdgBoxW, sdgBoxH);
+
+      if (isBW) {
+        ctx.strokeStyle = '#383848';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx, by, sdgBoxW, sdgBoxH);
+      }
+
       ctx.fillStyle = '#FFFFFF';
       ctx.font = 'bold 12px sans-serif';
       ctx.fillText(`${i + 1}`, bx + sdgBoxW / 2, by + 22);
     }
+
+    // --- 4 UNIVERSITY CORE VALUES BOXES (X: 1720, Y: 898) ---
+    const valStartX = 1720;
+    const valBoxW = 76;
+    const valBoxH = 34;
+
+    const coreValues = [
+      { name: 'PIONEER', icon: '🔭', color: '#1D5D3A', row: 0, col: 0 },
+      { name: 'COMPASSION', icon: '❤️', color: '#C5192D', row: 0, col: 1 },
+      { name: 'SERVICE', icon: '🤝', color: '#0F4B81', row: 1, col: 0 },
+      { name: 'TRUTH', icon: '⚖️', color: '#BF8B2E', row: 1, col: 1 },
+    ];
+
+    coreValues.forEach((val) => {
+      const vx = valStartX + val.col * (valBoxW + 4);
+      const vy = 898 + val.row * (valBoxH + 4);
+
+      ctx.fillStyle = isBW ? '#20202A' : '#FFFFFF';
+      ctx.fillRect(vx, vy, valBoxW, valBoxH);
+
+      ctx.strokeStyle = isBW ? '#444458' : val.color;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(vx, vy, valBoxW, valBoxH);
+
+      // Icon & Name
+      ctx.fillStyle = isBW ? '#EEEEEE' : val.color;
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(val.icon, vx + valBoxW / 2, vy + 14);
+      ctx.fillText(val.name, vx + valBoxW / 2, vy + 27);
+    });
 
     // --- ROW 2: SOCIAL MEDIA CONNECTIONS (Y ~ 1025) ---
     ctx.textAlign = 'left';
@@ -248,11 +300,11 @@ export function createPanpacificUniversityFrame(): FrameTemplate {
 
     const socXStart = 310;
     const socItems = [
-      { type: 'fb', iconColor: '#1877F2', text: 'panpacificu' },
-      { type: 'fb', iconColor: '#1877F2', text: 'officialpunptayug' },
+      { type: 'fb', iconColor: isBW ? '#333340' : '#1877F2', text: 'panpacificu' },
+      { type: 'fb', iconColor: isBW ? '#333340' : '#1877F2', text: 'officialpunptayug' },
       { type: 'tiktok', iconColor: '#000000', text: 'panpacificu' },
-      { type: 'insta', iconColor: '#E1306C', text: 'panpacificu_' },
-      { type: 'web', iconColor: '#0072CE', text: 'www.panpacificu.edu.ph' },
+      { type: 'insta', iconColor: isBW ? '#333340' : '#E1306C', text: 'panpacificu_' },
+      { type: 'web', iconColor: isBW ? '#333340' : '#0072CE', text: 'www.panpacificu.edu.ph' },
     ];
 
     let currentSocX = socXStart;
@@ -282,20 +334,28 @@ export function createPanpacificUniversityFrame(): FrameTemplate {
     });
   }
 
+  const isBWMode = boxesMode === 'bw';
+
   return {
-    id: 'frame_panpacific_university_official',
-    name: 'Panpacific University Frame',
-    description: 'Permanent official Panpacific University photo frame template.',
+    id: isBWMode ? 'frame_panpacific_bw' : 'frame_panpacific_color',
+    name: isBWMode ? 'Panpacific Official (B&W Boxes)' : 'Panpacific Official (Color Boxes)',
+    description: isBWMode
+      ? 'Official Panpacific University frame with monochrome / black & white SDG & Core Value boxes.'
+      : 'Official Panpacific University frame with full-color United Nations SDG & Core Value boxes.',
     category: 'Official',
     imageUrl: canvas.toDataURL('image/png'),
     hole: { x: 0, y: 0, width: 1920, height: 1080 },
     canvasWidth: 1920,
     canvasHeight: 1080,
+    boxesMode: boxesMode,
   };
 }
 
 export function generateSampleFrames(): FrameTemplate[] {
-  return [];
+  return [
+    createPanpacificUniversityFrame('color'),
+    createPanpacificUniversityFrame('bw'),
+  ];
 }
 
 // Generate vivid sample photos as Data URLs for immediate testing

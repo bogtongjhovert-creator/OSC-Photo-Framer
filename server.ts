@@ -21,6 +21,27 @@ async function startServer() {
     res.json({ status: "ok", app: "AutoFrame Studio Pro API" });
   });
 
+  // API: Convert HEIC / HEIF image to JPEG using Sharp (Native libheif)
+  app.post("/api/convert-heic", upload.single("file"), async (req: any, res: any) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        res.status(400).json({ error: "No HEIC file provided" });
+        return;
+      }
+      const jpegBuffer = await sharp(file.buffer)
+        .rotate() // Auto-orient via EXIF tags from iPhone
+        .jpeg({ quality: 94 })
+        .toBuffer();
+
+      res.setHeader("Content-Type", "image/jpeg");
+      res.send(jpegBuffer);
+    } catch (err: any) {
+      console.error("HEIC conversion error:", err);
+      res.status(500).json({ error: err.message || "Failed to convert HEIC" });
+    }
+  });
+
   // API: Hole Auto-Detection from PNG Buffer or Base64
   app.post("/api/detect-hole", async (req, res) => {
     try {

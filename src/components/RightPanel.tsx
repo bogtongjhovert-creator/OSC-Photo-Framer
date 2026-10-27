@@ -38,6 +38,8 @@ interface RightPanelProps {
   onDownloadZip: () => void;
   zipBlob: Blob | null;
   isProcessing: boolean;
+  boxesMode?: 'color' | 'bw';
+  onToggleBoxesMode?: (mode: 'color' | 'bw') => void;
 }
 
 export const RightPanel: React.FC<RightPanelProps> = ({
@@ -59,6 +61,8 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   onDownloadZip,
   zipBlob,
   isProcessing,
+  boxesMode = 'color',
+  onToggleBoxesMode,
 }) => {
   const frameInputRef = useRef<HTMLInputElement>(null);
   const photosInputRef = useRef<HTMLInputElement>(null);
@@ -71,10 +75,12 @@ export const RightPanel: React.FC<RightPanelProps> = ({
     setIsDraggingFrame(false);
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
-      if (files[0].type.startsWith('image/')) {
-        onCustomFrameUpload(files[0]);
+      const file = files[0];
+      const isHeic = file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif');
+      if (file.type.startsWith('image/') || isHeic) {
+        onCustomFrameUpload(file);
       } else {
-        alert('Please upload an image frame template (PNG, JPG, or WebP).');
+        alert('Please upload an image frame template (PNG, JPG, WebP, or HEIC).');
       }
     }
   };
@@ -119,6 +125,46 @@ export const RightPanel: React.FC<RightPanelProps> = ({
             )}
           </div>
 
+          {/* SDG & Core Value Boxes Color / B&W Button Selection */}
+          {onToggleBoxesMode && (
+            <div className="bg-[#14141E] p-2.5 rounded-xl border border-zinc-800 space-y-2 shadow-sm">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-zinc-300 flex items-center gap-1.5">
+                  <span>SDG &amp; Core Value Boxes</span>
+                </span>
+                <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-300">
+                  {boxesMode === 'bw' ? '⚪ Black & White' : '🎨 Full Color'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onToggleBoxesMode('color')}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 border ${
+                    boxesMode === 'color'
+                      ? 'bg-emerald-600 border-emerald-400 text-white shadow-sm ring-1 ring-emerald-400/40'
+                      : 'bg-[#1C1C24] border-zinc-700 text-zinc-400 hover:text-white'
+                  }`}
+                  title="Display UN SDG and Core Value boxes in full official colors"
+                >
+                  <span>🎨 Color Boxes</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onToggleBoxesMode('bw')}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 border ${
+                    boxesMode === 'bw'
+                      ? 'bg-zinc-700 border-zinc-400 text-white shadow-sm ring-1 ring-zinc-400/40'
+                      : 'bg-[#1C1C24] border-zinc-700 text-zinc-400 hover:text-white'
+                  }`}
+                  title="Display UN SDG and Core Value boxes in black & white"
+                >
+                  <span>⚪ Black &amp; White</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Drag & Drop Custom Frame Upload Box */}
           <div
             onDragOver={(e) => {
@@ -137,14 +183,14 @@ export const RightPanel: React.FC<RightPanelProps> = ({
             <input
               ref={frameInputRef}
               type="file"
-              accept="image/png, image/jpeg, image/webp"
+              accept="image/png, image/jpeg, image/webp, image/heic, image/heif, .heic, .heif"
               className="hidden"
               onChange={(e) => e.target.files?.[0] && onCustomFrameUpload(e.target.files[0])}
             />
             <div className="flex flex-col items-center gap-1.5">
               <Upload className="w-5 h-5 text-indigo-400" />
               <span className="text-xs font-semibold text-zinc-200">
-                Upload Frame (PNG / JPG / WebP)
+                Upload Frame (PNG / JPG / WebP / HEIC)
               </span>
               <span className="text-[10px] text-zinc-500">
                 Cutout window auto-detected &amp; photo automatically fitted
@@ -253,7 +299,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
               ref={photosInputRef}
               type="file"
               multiple
-              accept="image/*"
+              accept="image/*, .heic, .heif, image/heic, image/heif"
               className="hidden"
               onChange={(e) => e.target.files && onUploadPhotos(e.target.files)}
             />
@@ -263,7 +309,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                 Drag &amp; Drop Photos or Click
               </span>
               <span className="text-[10px] text-zinc-400">
-                Upload up to 150 high-res photos at once
+                Upload up to 150 photos (JPG, PNG, WebP, iPhone HEIC)
               </span>
             </div>
           </div>

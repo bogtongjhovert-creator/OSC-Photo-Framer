@@ -53,6 +53,8 @@ interface LeftPanelProps {
   onAutoFit?: (mode?: 'cover' | 'contain' | 'fill') => void;
   autoFitOnUpload?: boolean;
   onToggleAutoFitOnUpload?: (enabled: boolean) => void;
+  boxesMode?: 'color' | 'bw';
+  onToggleBoxesMode?: (mode: 'color' | 'bw') => void;
 }
 
 export const LeftPanel: React.FC<LeftPanelProps> = ({
@@ -73,6 +75,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   onAutoFit,
   autoFitOnUpload = true,
   onToggleAutoFitOnUpload,
+  boxesMode = 'color',
+  onToggleBoxesMode,
 }) => {
   const [activeTab, setActiveTab] = useState<'lightroom' | 'hole_geometry'>('lightroom');
   const [presetFilter, setPresetFilter] = useState<'all' | 'builtin' | 'custom'>('all');
@@ -751,6 +755,52 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* SDG & Core Value Boxes: Color vs Black & White Selection Card */}
+            <div className="space-y-2.5 bg-gradient-to-b from-[#181824] to-[#13131A] p-3 rounded-xl border border-emerald-500/30 shadow-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                  <Palette className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Frame Boxes Style</span>
+                </span>
+                <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/50">
+                  {boxesMode === 'bw' ? '⚪ Black & White' : '🎨 Full Color'}
+                </span>
+              </div>
+
+              <p className="text-[10px] text-zinc-400 leading-tight">
+                Switch UN SDG &amp; Core Value boxes between official vibrant colors and publication monochrome without altering the layout.
+              </p>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => onToggleBoxesMode?.('color')}
+                  className={`py-2 px-2.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm border ${
+                    boxesMode === 'color'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 border-emerald-400 text-white shadow-emerald-900/30 ring-1 ring-emerald-400/40'
+                      : 'bg-[#1D1D28] border-zinc-700/60 text-zinc-300 hover:bg-[#252535]'
+                  }`}
+                  title="Display UN SDG and Core Value boxes in full official colors"
+                >
+                  <span className="text-sm">🎨</span>
+                  <span>Color Boxes</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onToggleBoxesMode?.('bw')}
+                  className={`py-2 px-2.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm border ${
+                    boxesMode === 'bw'
+                      ? 'bg-gradient-to-r from-zinc-700 to-zinc-900 border-zinc-400 text-white shadow-black/50 ring-1 ring-zinc-400/40'
+                      : 'bg-[#1D1D28] border-zinc-700/60 text-zinc-300 hover:bg-[#252535]'
+                  }`}
+                  title="Display UN SDG and Core Value boxes in black & white / monochrome"
+                >
+                  <span className="text-sm">⚪</span>
+                  <span>Black &amp; White</span>
+                </button>
+              </div>
             </div>
 
             {/* Fit Mode Selector */}
