@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import { EditSettings, HoleBoundingBox, UserPhoto } from '../types';
+import { EditSettings, HoleBoundingBox, UserPhoto, ExportNamingSettings } from '../types';
 
 /**
  * Automatically detects the bounding box (x, y, width, height) of the cutout
@@ -565,8 +565,121 @@ export async function renderFramedPhotoCanvas(
 }
 
 /**
+ * Generates the clean output filename for a photo based on its customExportName,
+ * original filename, index, and batch naming settings.
+ */
+export function generatePhotoExportFileName(
+  photo: UserPhoto,
+  index: number = 0,
+  settings?: Partial<ExportNamingSettings>
+): string {
+  // If user explicitly set a custom filename for this specific photo, prioritize it
+  if (photo.customExportName && photo.customExportName.trim()) {
+    let custom = photo.customExportName.trim().replace(/[\\/:*?"<>|]/g, '_');
+    if (!/\.(png|jpe?g|webp)$/i.test(custom)) {
+      custom += '.png';
+    }
+    return custom;
+  }
+
+  const safeOriginal = (photo.name || `photo_${index + 1}`)
+    .replace(/\.[^/.]+$/, '')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .trim();
+
+  const prefix = settings?.filePrefix !== undefined ? settings.filePrefix : 'framed_';
+  const pattern = settings?.namingPattern || 'prefix_index_name';
+
+  let result = '';
+  switch (pattern) {
+    case 'prefix_name':
+      result = `${prefix}${safeOriginal}.png`;
+      break;
+    case 'prefix_index':
+      result = `${prefix}${index + 1}.png`;
+      break;
+    case 'name_only':
+      result = `${safeOriginal}_framed.png`;
+      break;
+    case 'prefix_index_name':
+    default:
+      result = `${prefix}${index + 1}_${safeOriginal}.png`;
+      break;
+  }
+
+  return result.replace(/[\\/:*?"<>|]/g, '_');
+}
+
+/**
+ * Renders and triggers an instant browser download for a single framed photo
+ * with a customizable filename.
+ */
+export async function exportSingleFramedPhoto(
+  photo: UserPhoto,
+  templateImgUrl: string,
+  hole: HoleBoundingBox,
+  settings: EditSettings,
+  customFileName?: string,
+  canvasWidth?: number,
+  canvasHeight?: number,
+  hasSolidCutout?: boolean
+): Promise<{ blob: Blob; fileName: string; dataUrl: string }> {
+  const templateImg = new Image();
+  templateImg.crossOrigin = 'anonymous';
+
+  await new Promise<void>((resolve, reject) => {
+    templateImg.onload = () => resolve();
+    templateImg.onerror = (err) => reject(err);
+    templateImg.src = templateImgUrl;
+  });
+
+  const canvas = await renderFramedPhotoCanvas(
+    photo.dataUrl,
+    templateImg,
+    hole,
+    settings,
+    canvasWidth,
+    canvasHeight,
+    hasSolidCutout
+  );
+
+  const blob = await new Promise<Blob>((res) => {
+    canvas.toBlob((b) => res(b || new Blob()), 'image/png', 0.95);
+  });
+
+  const dataUrl = canvas.toDataURL('image/png', 0.95);
+
+  let finalFileName = customFileName?.trim() || photo.customExportName?.trim();
+  if (!finalFileName) {
+    const safeName = photo.name.replace(/\.[^/.]+$/, '').replace(/[\\/:*?"<>|]/g, '_');
+    finalFileName = `framed_${safeName}.png`;
+  } else {
+    finalFileName = finalFileName.replace(/[\\/:*?"<>|]/g, '_');
+    if (!/\.(png|jpe?g|webp)$/i.test(finalFileName)) {
+      finalFileName += '.png';
+    }
+  }
+
+  // Trigger download in browser
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = finalFileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  // Clean up canvas
+  canvas.width = 1;
+  canvas.height = 1;
+
+  return { blob, fileName: finalFileName, dataUrl };
+}
+
+/**
  * Batch Process Queue Runner: Processes up to 150 photos in chunks.
- * Dynamically updates progress, releases memory (garbage collection hint), and generates zip archive.
+ * Dynamically updates progress, applies custom filenames, releases memory, and generates zip archive.
  */
 export async function batchProcessPhotos(
   photos: UserPhoto[],
@@ -576,7 +689,8 @@ export async function batchProcessPhotos(
   onProgress: (completedCount: number, currentPhotoName: string, itemProgress?: number) => void,
   canvasWidth?: number,
   canvasHeight?: number,
-  hasSolidCutout?: boolean
+  hasSolidCutout?: boolean,
+  namingSettings?: Partial<ExportNamingSettings>
 ): Promise<{ zipBlob: Blob; processedPhotos: UserPhoto[] }> {
   // Preload frame template image
   const templateImg = new Image();
@@ -620,9 +734,8 @@ export async function batchProcessPhotos(
 
           const dataUrl = canvas.toDataURL('image/png', 0.9);
 
-          // Add to zip folder
-          const safeName = photo.name.replace(/\.[^/.]+$/, '');
-          const fileName = `framed_${globalIdx + 1}_${safeName}.png`;
+          // Add to zip folder with custom or template generated filename
+          const fileName = generatePhotoExportFileName(photo, globalIdx, namingSettings);
           folder?.file(fileName, blob);
 
           const updated: UserPhoto = {
@@ -664,3 +777,4 @@ export async function batchProcessPhotos(
 
   return { zipBlob, processedPhotos: updatedPhotos };
 }
+

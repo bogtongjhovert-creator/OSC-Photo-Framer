@@ -44,6 +44,13 @@ export interface UserPhoto {
   processedBlob?: Blob;
   errorMessage?: string;
   progressPercent?: number;
+  customExportName?: string;
+}
+
+export interface ExportNamingSettings {
+  zipFileName: string;
+  filePrefix: string;
+  namingPattern: 'prefix_index_name' | 'prefix_name' | 'prefix_index' | 'name_only';
 }
 
 export interface Preset {

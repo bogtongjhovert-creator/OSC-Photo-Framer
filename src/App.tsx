@@ -10,6 +10,7 @@ import {
   HoleBoundingBox,
   BatchProgress,
   Preset,
+  ExportNamingSettings,
 } from './types';
 import {
   generateSamplePhotos,
@@ -26,6 +27,7 @@ import {
 import {
   detectTransparentHole,
   batchProcessPhotos,
+  exportSingleFramedPhoto,
 } from './utils/imageProcessing';
 import { isHeicFile, readFileToDataUrl } from './utils/heicHelper';
 
@@ -61,6 +63,14 @@ export default function App() {
   const [zipBlob, setZipBlob] = useState<Blob | null>(null);
   const [autoFitOnUpload, setAutoFitOnUpload] = useState<boolean>(true);
   const [fitToastMessage, setFitToastMessage] = useState<string | null>(null);
+
+  // Export File Naming Settings
+  const [namingSettings, setNamingSettings] = useState<ExportNamingSettings>({
+    zipFileName: 'panpacific_framed_photos.zip',
+    filePrefix: 'framed_',
+    namingPattern: 'prefix_index_name',
+  });
+  const [isExportingSingle, setIsExportingSingle] = useState(false);
 
   const showFitToast = useCallback((msg: string) => {
     setFitToastMessage(msg);
@@ -324,6 +334,19 @@ export default function App() {
     setSelectedPhotoIndex((curr) => Math.max(0, curr - 1));
   }, []);
 
+  // Rename Photo Custom Export Filename
+  const handleRenamePhoto = useCallback((photoId: string, newName: string) => {
+    setPhotos((prev) =>
+      prev.map((p) => {
+        if (p.id !== photoId) return p;
+        return {
+          ...p,
+          customExportName: newName.trim(),
+        };
+      })
+    );
+  }, []);
+
   // Clear All Photos
   const handleClearAllPhotos = useCallback(() => {
     setPhotos([]);
@@ -436,6 +459,50 @@ export default function App() {
     return () => clearInterval(interval);
   }, [batchProgress.status, batchProgress.startTime, batchProgress.completed, batchProgress.total]);
 
+  // Export Single Photo with customizable filename
+  const handleExportSinglePhoto = useCallback(
+    async (photoIndexToExport: number, customName?: string) => {
+      const photo = photos[photoIndexToExport];
+      if (!photo || !selectedFrame) return;
+
+      setIsExportingSingle(true);
+      try {
+        const result = await exportSingleFramedPhoto(
+          photo,
+          selectedFrame.imageUrl,
+          hole,
+          settings,
+          customName || photo.customExportName,
+          selectedFrame.canvasWidth,
+          selectedFrame.canvasHeight,
+          selectedFrame.hasSolidCutout
+        );
+
+        setPhotos((prev) =>
+          prev.map((p) =>
+            p.id === photo.id
+              ? {
+                  ...p,
+                  status: 'completed',
+                  processedBlob: result.blob,
+                  processedDataUrl: result.dataUrl,
+                  customExportName: result.fileName,
+                }
+              : p
+          )
+        );
+
+        showFitToast(`⚡ Exported "${result.fileName}" successfully!`);
+      } catch (err: any) {
+        console.error('Failed to export single photo:', err);
+        alert(`Failed to export photo: ${err.message || 'Unknown error'}`);
+      } finally {
+        setIsExportingSingle(false);
+      }
+    },
+    [photos, selectedFrame, hole, settings, showFitToast]
+  );
+
   // Start Parallel Batch Framing
   const handleStartBatch = useCallback(async () => {
     if (!selectedFrame || photos.length === 0) return;
@@ -482,7 +549,8 @@ export default function App() {
         },
         selectedFrame.canvasWidth,
         selectedFrame.canvasHeight,
-        selectedFrame.hasSolidCutout
+        selectedFrame.hasSolidCutout,
+        namingSettings
       );
 
       const endTime = Date.now();
@@ -509,20 +577,24 @@ export default function App() {
     } finally {
       setIsProcessing(false);
     }
-  }, [selectedFrame, photos, hole, settings]);
+  }, [selectedFrame, photos, hole, settings, namingSettings]);
 
   // Download ZIP
   const handleDownloadZip = useCallback(() => {
     if (!zipBlob) return;
+    let downloadName = (namingSettings.zipFileName || 'panpacific_framed_photos').trim();
+    if (!downloadName.toLowerCase().endsWith('.zip')) {
+      downloadName += '.zip';
+    }
     const url = URL.createObjectURL(zipBlob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'framed_photos.zip';
+    link.download = downloadName;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-  }, [zipBlob]);
+  }, [zipBlob, namingSettings.zipFileName]);
 
   const currentPhoto = photos[selectedPhotoIndex] || null;
 
@@ -576,6 +648,9 @@ export default function App() {
           onAutoFit={handleAutoFit}
           boxesMode={boxesMode}
           onToggleBoxesMode={handleToggleBoxesMode}
+          onRenamePhoto={handleRenamePhoto}
+          onExportSinglePhoto={handleExportSinglePhoto}
+          isExportingSingle={isExportingSingle}
         />
 
         {/* Right Panel: Template Manager & 150-Photo Queue & Batch Action */}
@@ -591,6 +666,7 @@ export default function App() {
           onSelectPhotoIndex={setSelectedPhotoIndex}
           onUploadPhotos={handleUploadPhotos}
           onRemovePhoto={handleRemovePhoto}
+          onRenamePhoto={handleRenamePhoto}
           onClearAllPhotos={handleClearAllPhotos}
           maxPhotos={MAX_PHOTOS}
           batchProgress={batchProgress}
@@ -600,6 +676,9 @@ export default function App() {
           isProcessing={isProcessing}
           boxesMode={boxesMode}
           onToggleBoxesMode={handleToggleBoxesMode}
+          namingSettings={namingSettings}
+          onChangeNamingSettings={setNamingSettings}
+          onExportSinglePhoto={handleExportSinglePhoto}
         />
       </div>
 
