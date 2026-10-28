@@ -45,6 +45,8 @@ export interface UserPhoto {
   errorMessage?: string;
   progressPercent?: number;
   customExportName?: string;
+  isRaw?: boolean;
+  rawFormatName?: string;
 }
 
 export interface ExportNamingSettings {

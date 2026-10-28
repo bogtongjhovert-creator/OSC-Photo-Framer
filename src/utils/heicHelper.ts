@@ -1,4 +1,5 @@
 import heic2any from 'heic2any';
+import { isRawFile, readRawFileToDataUrl } from './rawHelper';
 
 /**
  * Checks if a given file is a HEIC or HEIF image based on its name or MIME type.
@@ -76,6 +77,9 @@ export async function convertHeicFileToDataUrl(file: File): Promise<string> {
 export async function readFileToDataUrl(file: File): Promise<string> {
   if (isHeicFile(file)) {
     return await convertHeicFileToDataUrl(file);
+  }
+  if (isRawFile(file)) {
+    return await readRawFileToDataUrl(file);
   }
 
   return new Promise<string>((resolve, reject) => {

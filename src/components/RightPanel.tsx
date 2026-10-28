@@ -20,9 +20,11 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
+  Camera,
 } from 'lucide-react';
 import { BatchProgress, FrameTemplate, UserPhoto, ExportNamingSettings } from '../types';
 import { formatDurationSeconds, formatStopwatch, formatSpeed } from '../utils/format';
+import { isRawFile } from '../utils/rawHelper';
 
 interface RightPanelProps {
   frames: FrameTemplate[];
@@ -112,10 +114,11 @@ export const RightPanel: React.FC<RightPanelProps> = ({
     if (files && files.length > 0) {
       const file = files[0];
       const isHeic = file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif');
-      if (file.type.startsWith('image/') || isHeic) {
+      const isRaw = isRawFile(file);
+      if (file.type.startsWith('image/') || isHeic || isRaw) {
         onCustomFrameUpload(file);
       } else {
-        alert('Please upload an image frame template (PNG, JPG, WebP, or HEIC).');
+        alert('Please upload an image frame template (PNG, JPG, WebP, HEIC, or RAW).');
       }
     }
   };
@@ -218,14 +221,14 @@ export const RightPanel: React.FC<RightPanelProps> = ({
             <input
               ref={frameInputRef}
               type="file"
-              accept="image/png, image/jpeg, image/webp, image/heic, image/heif, .heic, .heif"
+              accept="image/png, image/jpeg, image/webp, image/heic, image/heif, .heic, .heif, .cr2, .cr3, .crw, .nef, .nrw, .arw, .srf, .sr2, .raf, .rw2, .orf, .pef, .ptx, .dng, .rwl, .raw, .srw"
               className="hidden"
               onChange={(e) => e.target.files?.[0] && onCustomFrameUpload(e.target.files[0])}
             />
             <div className="flex flex-col items-center gap-1.5">
               <Upload className="w-5 h-5 text-indigo-400" />
               <span className="text-xs font-semibold text-zinc-200">
-                Upload Frame (PNG / JPG / WebP / HEIC)
+                Upload Frame (PNG / JPG / WebP / HEIC / RAW)
               </span>
               <span className="text-[10px] text-zinc-500">
                 Cutout window auto-detected &amp; photo automatically fitted
@@ -334,7 +337,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
               ref={photosInputRef}
               type="file"
               multiple
-              accept="image/*, .heic, .heif, image/heic, image/heif"
+              accept="image/*, .heic, .heif, image/heic, image/heif, .cr2, .cr3, .crw, .nef, .nrw, .arw, .srf, .sr2, .raf, .rw2, .orf, .pef, .ptx, .dng, .rwl, .raw, .srw"
               className="hidden"
               onChange={(e) => e.target.files && onUploadPhotos(e.target.files)}
             />
@@ -344,7 +347,10 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                 Drag &amp; Drop Photos or Click
               </span>
               <span className="text-[10px] text-zinc-400">
-                Upload up to 150 photos (JPG, PNG, WebP, iPhone HEIC)
+                Upload up to 150 photos (JPG, PNG, HEIC, &amp; Camera RAW)
+              </span>
+              <span className="text-[9px] text-zinc-500">
+                Canon CR2/CR3, Nikon NEF, Sony ARW, Fuji RAF, DNG, etc.
               </span>
             </div>
           </div>
@@ -422,8 +428,17 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                           </div>
                         ) : (
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <p className="truncate text-xs font-medium" title={photo.name}>{photo.name}</p>
+                              {photo.isRaw && (
+                                <span
+                                  className="px-1.5 py-0.2 text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded inline-flex items-center gap-0.5 shrink-0"
+                                  title={`${photo.rawFormatName || 'Camera RAW'} (High-res preview extracted)`}
+                                >
+                                  <Camera className="w-2.5 h-2.5" />
+                                  RAW
+                                </span>
+                              )}
                               {onRenamePhoto && (
                                 <button
                                   type="button"
@@ -443,8 +458,11 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                                 ↳ {photo.customExportName}
                               </span>
                             ) : (
-                              <span className="text-[10px] text-zinc-500 font-mono block">
-                                {(photo.size / 1024).toFixed(0)} KB
+                              <span className="text-[10px] text-zinc-500 font-mono block truncate">
+                                {photo.isRaw && photo.rawFormatName ? `${photo.rawFormatName} • ` : ''}
+                                {photo.size / (1024 * 1024) >= 1
+                                  ? `${(photo.size / (1024 * 1024)).toFixed(1)} MB`
+                                  : `${(photo.size / 1024).toFixed(0)} KB`}
                               </span>
                             )}
                           </div>

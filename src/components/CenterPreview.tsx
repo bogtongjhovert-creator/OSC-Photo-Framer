@@ -26,6 +26,7 @@ import {
   Check,
   X,
   FileText,
+  Camera,
 } from 'lucide-react';
 import { BatchProgress, EditSettings, FrameTemplate, HoleBoundingBox, UserPhoto } from '../types';
 import { renderFramedPhotoCanvas } from '../utils/imageProcessing';
@@ -726,8 +727,19 @@ export const CenterPreview: React.FC<CenterPreviewProps> = ({
             <span className="text-xs text-zinc-400 font-medium truncate max-w-[150px] sm:max-w-[220px]" title={currentPhoto.name}>
               📄 {currentPhoto.name}
             </span>
-            <span className="text-[10px] text-zinc-500 font-mono">
-              ({(currentPhoto.size / 1024).toFixed(0)} KB)
+            {currentPhoto.isRaw && (
+              <span
+                className="px-1.5 py-0.5 text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded flex items-center gap-1 shrink-0"
+                title={`${currentPhoto.rawFormatName || 'Camera RAW'} (High-res embedded preview extracted)`}
+              >
+                <Camera className="w-2.5 h-2.5" />
+                {currentPhoto.rawFormatName || 'RAW'}
+              </span>
+            )}
+            <span className="text-[10px] text-zinc-500 font-mono shrink-0">
+              ({currentPhoto.size / (1024 * 1024) >= 1
+                ? `${(currentPhoto.size / (1024 * 1024)).toFixed(1)} MB`
+                : `${(currentPhoto.size / 1024).toFixed(0)} KB`})
             </span>
           </div>
 

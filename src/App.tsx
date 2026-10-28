@@ -30,6 +30,7 @@ import {
   exportSingleFramedPhoto,
 } from './utils/imageProcessing';
 import { isHeicFile, readFileToDataUrl } from './utils/heicHelper';
+import { isRawFile, getRawFormatLabel } from './utils/rawHelper';
 
 export default function App() {
   const MAX_PHOTOS = 150;
@@ -276,9 +277,15 @@ export default function App() {
 
       for (const file of filesToProcess) {
         try {
-          if (isHeicFile(file)) {
+          const isRaw = isRawFile(file);
+          const rawFormatName = isRaw ? getRawFormatLabel(file.name) : undefined;
+
+          if (isRaw) {
+            showFitToast(`📸 Extracting full-resolution RAW photo from ${rawFormatName} ("${file.name}")...`);
+          } else if (isHeicFile(file)) {
             showFitToast(`Converting iPhone HEIC photo "${file.name}"...`);
           }
+
           const dataUrl = await readFileToDataUrl(file);
           const newPhoto: UserPhoto = {
             id: `photo_${Date.now()}_${Math.random()}`,
@@ -287,6 +294,8 @@ export default function App() {
             dataUrl,
             file,
             status: 'queued',
+            isRaw,
+            rawFormatName,
           };
 
           setPhotos((prev) => {
@@ -295,7 +304,7 @@ export default function App() {
           });
         } catch (err: any) {
           console.error('Failed to read photo:', err);
-          showFitToast(`⚠️ Error loading ${file.name}: ${err.message || 'HEIC decoding error'}`);
+          showFitToast(`⚠️ Error loading ${file.name}: ${err.message || 'Image loading error'}`);
         }
       }
 

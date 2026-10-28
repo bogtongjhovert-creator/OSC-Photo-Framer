@@ -358,14 +358,14 @@ export function generateSampleFrames(): FrameTemplate[] {
   ];
 }
 
-// Generate vivid sample photos as Data URLs for immediate testing
+// Generate vivid sample photos as Data URLs for immediate testing (includes JPEG and Camera RAW examples)
 export function generateSamplePhotos(count: number = 5): UserPhoto[] {
   const photoPresets = [
-    { name: 'Mountain Sunrise.jpg', bg1: '#FF512F', bg2: '#DD2476', label: '🏔️ Alpine Sunrise' },
-    { name: 'Urban Neon Skyline.jpg', bg1: '#8A2387', bg2: '#E94057', label: '🌃 Urban Skyline' },
-    { name: 'Emerald Forest.jpg', bg1: '#134E5E', bg2: '#71B280', label: '🌲 Emerald Forest' },
-    { name: 'Ocean Sunset.jpg', bg1: '#2193b0', bg2: '#6dd5ed', label: '🌊 Ocean Wave' },
-    { name: 'Golden Hour Portrait.jpg', bg1: '#F2994A', bg2: '#F2C94C', label: '🌅 Golden Portrait' },
+    { name: 'Mountain_Sunrise.jpg', bg1: '#FF512F', bg2: '#DD2476', label: '🏔️ Alpine Sunrise', isRaw: false, size: 1450000 },
+    { name: 'Canon_EOS_R5_Studio.cr3', bg1: '#8A2387', bg2: '#E94057', label: '📸 Canon EOS R5 RAW', isRaw: true, rawFormatName: 'Canon RAW', size: 38500000 },
+    { name: 'Emerald_Forest.jpg', bg1: '#134E5E', bg2: '#71B280', label: '🌲 Emerald Forest', isRaw: false, size: 2100000 },
+    { name: 'Sony_A7IV_Portrait.arw', bg1: '#2193b0', bg2: '#6dd5ed', label: '📸 Sony Alpha RAW', isRaw: true, rawFormatName: 'Sony RAW', size: 34200000 },
+    { name: 'Nikon_Z8_Sunset.nef', bg1: '#F2994A', bg2: '#F2C94C', label: '📸 Nikon Z8 RAW', isRaw: true, rawFormatName: 'Nikon RAW', size: 45600000 },
   ];
 
   const photos: UserPhoto[] = [];
@@ -405,16 +405,18 @@ export function generateSamplePhotos(count: number = 5): UserPhoto[] {
       ctx.fillText(`${preset.label} #${i + 1}`, 600, 420);
 
       ctx.font = '24px sans-serif';
-      ctx.fillText(`Sample Photo High-Res (${1200}x${800})`, 600, 480);
+      ctx.fillText(preset.isRaw ? `High-Res RAW Preview (${1200}x${800})` : `Sample Photo High-Res (${1200}x${800})`, 600, 480);
 
       const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
 
       photos.push({
         id: `sample_photo_${Date.now()}_${i}`,
-        name: `${i + 1}_${preset.name}`,
-        size: 850000 + (i * 12000),
+        name: preset.name,
+        size: preset.size,
         dataUrl,
         status: 'queued',
+        isRaw: preset.isRaw,
+        rawFormatName: preset.rawFormatName,
       });
     }
   }
